@@ -1,0 +1,68 @@
+# yakuza-gmd-gmt-blender
+Blender Import/Export addon for Yakuza series GMT animation files, CMT camera animations, and GMD model files. Supports Blender versions >= 3.2 and <= 5.1.
+
+This project integrates:
+- GMT/CMT animation support from `yakuza-gmt-blender`
+- GMD model support from `git@github.com:theturboturnip/yk_gmd_io.git`
+ 
+***
+ 
+# Installing
+Download the latest release zip and install it in Blender. To do so, follow the instructions in the [official Blender manual](https://docs.blender.org/manual/en/latest/editors/preferences/addons.html) for installing add-ons, or follow the brief instructions below.
+
+Open the `Edit` -> `Preferences` window from the menu bar, go to `Add-ons`, click on the `Install` button, and select the release zip you downloaded. Then, enable the script by checking the box next to it.
+
+***
+
+# Updating
+The addon includes an auto-update checker that is enabled by default. It will check for updates every time Blender is launched, once a day at most. You can also go to the addon preferences to check for an update manually.
+
+***
+
+# Usage
+After enabling the addon, the File > Import and File > Export menus include GMT/CMT animation entries and GMD model entries.
+
+***
+
+# Testing
+Run the Blender compatibility smoke tests with:
+
+```sh
+blender --background --factory-startup --python tests/blender_51_smoke.py
+```
+
+***
+
+# Credits
+Thanks to **CGCookie** for the [Blender addon updater](https://github.com/CGCookie/blender-addon-updater) module.
+
+Original authors:
+- **SutandoTsukai181** for `yakuza-gmt-blender`, which provides GMT animation import/export and CMT camera animation support.
+- **Samuel Stark (TheTurboTurnip)** for `yk_gmd_io`, which provides GMD model import/export support.
+
+GMD model import/export support is integrated from **Samuel Stark (TheTurboTurnip)**'s `yk_gmd_io` project, cloned from `git@github.com:theturboturnip/yk_gmd_io.git` at commit `32016a1`.
+
+***
+
+# Terms of Use
+By using this tool, you agree to the following:
+
+**I understand that**
+- I have to credit this tool and its author(s) whenever I **publish** content that was created using the tool, **partially** or fully.
+- I have to credit this tool whenever I **publish** footage of content **I** created using the tool, if the main purpose of that **footage** is to showcase that content.
+- I can credit this tool just by posting a **link** to it on the main page of my **mod**/content in a **publicly visible** location, while mentioning its **name** and author(s).
+- If I **do not** credit this tool, I cannot **release** **mods**/footage that I created using the tool.
+- **Only** in the case I do not publish/**post** any mods/**footage** I created using this tool, I do not have to credit the tool.
+
+**Further, I also understand that**
+- Content created using this tool can be easily identified by the author(s) of the tool, who can decide whether or not the content was created/generated/transformed using the tool.
+- These **Terms of Use** apply retrospectively to all versions of this tool, and may be modified without notice.
+
+**I absolutely cannot, without explicit permission from the original tool's author**
+- Use this tool or any content created using it in a **commercial project**.
+- Use this tool or any content created using it in a project, whether paid or free, that is being **monetized** in any form, using any monetization platform such as **PayPal** or **Patreon**.
+- Use this tool or any content created using it if it has been determined that I willingly used the **leaked**, unfinished, unstable build of this tool that was released without the author's permission in 2021.
+
+### If you do not agree to any of these terms, then you are not allowed to use this tool.
+
+While these terms might sound weird, they are only here to guarantee that the work done behind this tool receives proper credit. If all it takes to make a mod is to learn how to use a tool, then the modder should receive credit for being able to read instructions, not for releasing content that could never be made without the use of those tools.

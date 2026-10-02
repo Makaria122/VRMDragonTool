@@ -1,0 +1,36 @@
+# Local game assets and outputs: never publish these
+/PrivateData/
+/Profiles/
+/ModOutputs/
+/ModPack/
+/Blender/
+/Tool/runtime/
+/Tool/userdata/
+/PublicRelease*/
+# Private historical diagnostics; public notes are in CHANGELOG.md
+/Tool/MODLOG.md
+/bundle-manifest.json
+*.gmd
+*.gmt
+*.par
+*.vrm
+*.blend
+*.blend1
+*.dds
+*.zip
+*.7z
+*.exe
+*.dll
+*.bin
+*.safetensors
+*.gguf
+*.log
+.env
+.env.*
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.vscode/
+.idea/
+# Do not publish nested vendor Git metadata
+**/.git/

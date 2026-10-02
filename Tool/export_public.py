@@ -9,7 +9,7 @@ import tempfile
 from pathlib import Path
 
 ROOT=Path(__file__).resolve().parents[1]
-TOP_FILES=('Start-Tool.cmd','.gitignore','README.md','LICENSE','THIRD_PARTY_NOTICES.md')
+TOP_FILES=('Start-Tool.cmd','.gitignore','.gitattributes','README.md','LICENSE','THIRD_PARTY_NOTICES.md')
 TOOL_FILES=('launch.py','export_public.py','README.md','CHANGELOG.md','requirements.txt')
 SOURCE_TREES=('um','tests','prompts','vendor/yakuza-gmd-gmt-blender')
 SUFFIXES={'.py','.md','.txt','.rst'}
@@ -47,8 +47,8 @@ def export(output,root=ROOT):
         stage=Path(t)/'source';stage.mkdir();manifest={}
         for file in files:
             relative=file.relative_to(root);destination=stage/relative;destination.parent.mkdir(parents=True,exist_ok=True)
-            shutil.copyfile(file,destination);manifest[relative.as_posix()]=hashlib.sha256(destination.read_bytes()).hexdigest()
-        (stage/'public-manifest.json').write_text(json.dumps({'private_assets_included':False,'files':manifest},indent=2)+'\n',encoding='utf-8')
+            destination.write_bytes(file.read_bytes().replace(b'\r\n',b'\n'));manifest[relative.as_posix()]=hashlib.sha256(destination.read_bytes()).hexdigest()
+        (stage/'public-manifest.json').write_text(json.dumps({'private_assets_included':False,'text_newlines':'LF','files':manifest},indent=2)+'\n',encoding='utf-8')
         stage.rename(output)
     return {'source_files':len(files),'output':str(output),'github_pushed':False}
 

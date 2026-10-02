@@ -10,7 +10,8 @@ import json
 import shutil
 from pathlib import Path
 
-# Only reviewed default-age layouts. Other discovered candidates remain excluded.
+# Reviewed layouts plus explicitly approved Sawa age/dead/sitting exceptions.
+# Other discovered young/dead/special candidates remain excluded.
 # base, variant key, tops override, face override, hair override
 ROWS = (
     ('kaito', 'combat_damage04', 'c_am_kaito_c04bd01', None, None),
@@ -36,6 +37,9 @@ ROWS = (
     # default preparation. The shared face keeps its independently exported owner.
     ('kuwana', 'event_c04', 'c_cm_x_kuwana_c04bd01', None, None),
     ('kuwana', 'event_c10', 'c_cm_x_kuwana_c10bd01', None, None),
+    ('sawa', 'age18', 'c_aw_sawa_18', None, None),
+    ('sawa', 'dead', 'c_aw_sawa_dead', None, None),
+    ('sawa', 'sitting', 'c_aw_sawa_sit', None, None),
 )
 
 
@@ -62,7 +66,8 @@ def variant_target(key):
     stem = Path(refs['tops']).stem
     return Target(key, original.label + ' / ' + name + ' (offline variant)', stem,
                   original.bone_count, refs, slots,
-                  'Offline-tested reference recipe; runtime switch usage unverified. '
+                  ('Sawa age/dead/sitting reference; runtime posture/expression unverified. ' if base=='sawa' else
+                   'Offline-tested reference recipe; runtime switch usage unverified. ') +
                   'Yagami shared-bone proxy only, not native cutscene validation.')
 
 

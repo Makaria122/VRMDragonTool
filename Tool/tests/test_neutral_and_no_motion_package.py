@@ -51,6 +51,23 @@ class NeutralAndNoMotionTests(unittest.TestCase):
                     self.assertEqual(image.size,(4,4))
                     self.assertEqual(image.convert('RGBA').getpixel((0,0)),color)
 
+    def test_generated_maps_keep_legacy_bc1_and_bgra_layouts(self):
+        import struct
+        from PIL import Image
+        with tempfile.TemporaryDirectory() as t:
+            maps=write_neutral_maps(t)
+            for name,expected_length,mips in [('multi',152,3),('white',136,0),('normal',192,0)]:
+                data=maps[name].read_bytes()
+                self.assertEqual(len(data),expected_length)
+                self.assertEqual(struct.unpack_from('<I',data,28)[0],mips)
+                self.assertEqual(data[84:88],b'\0'*4 if name=='normal' else b'DXT1')
+                with Image.open(maps[name]) as image:
+                    self.assertEqual(image.convert('RGBA').getcolors(),[(16,RECIPES[name])])
+            normal=maps['normal'].read_bytes()
+            self.assertEqual(struct.unpack_from('<4I',normal,92),(0xff0000,0xff00,0xff,0xff000000))
+            self.assertEqual(normal[128:132],bytes((255,128,128,255)))
+        with self.assertRaises(ValueError):dds_bytes((0,0,0,0),encoding='bc1')
+
     def test_no_motion_strict_candidate_can_be_packaged(self):
         with tempfile.TemporaryDirectory() as t:
             root=Path(t);candidate=root/'candidate';candidate.mkdir();target=get_target('yagami')

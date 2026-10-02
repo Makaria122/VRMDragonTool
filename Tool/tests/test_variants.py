@@ -21,12 +21,25 @@ class VariantTests(unittest.TestCase):
         self.assertEqual([s.stem for s in t.slots],['c_cm_x_kaito','c_cm_f_kaito'])
         self.assertEqual(t.slots[1].source_regions,('face','hair'))
         with self.assertRaises(ValueError):get_target('kaito__boy')
-        self.assertEqual(variants_for('sawa'),['sawa'])
+        self.assertEqual(variants_for('sawa'),['sawa','sawa__age18','sawa__dead','sawa__sitting'])
         self.assertEqual(variants_for('kuwana'),['kuwana','kuwana__event_c04','kuwana__event_c10'])
         owned=replacement_ownership(variants_for('kuwana'))
         self.assertEqual(len(owned),4)
         self.assertEqual(owned['chara/face/c_cm_f_kuwana/c_cm_f_kuwana.gmd']['owner'],'kuwana')
         self.assertEqual(get_target('kuwana__event_c10').slots[0].stem,'c_cm_x_kuwana_c10bd01')
+
+    def test_sawa_special_layouts_have_distinct_owned_gmds(self):
+        keys=variants_for('sawa');owners=replacement_ownership(keys)
+        self.assertEqual(len(owners),4)
+        for key,stem in zip(keys,('c_aw_sawa','c_aw_sawa_18','c_aw_sawa_dead','c_aw_sawa_sit')):
+            target=get_target(key)
+            self.assertEqual(target.bone_count,182)
+            self.assertEqual(len(target.slots),1)
+            self.assertEqual(target.slots[0].stem,stem)
+            self.assertEqual(target.slots[0].source_regions,('tops','face','hair'))
+            self.assertEqual(len(set(target.reference_files.values())),1)
+            self.assertEqual(owners[f'chara/tops/{stem}/{stem}.gmd']['owner'],key)
+        with self.assertRaises(ValueError):get_target('sawa__amasawa')
 
     def test_shared_path_has_one_predeclared_owner(self):
         owners=replacement_ownership(['kaito','kaito__cutscene','kaito__suit'])

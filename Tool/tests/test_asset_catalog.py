@@ -20,6 +20,17 @@ class AssetCatalogTests(unittest.TestCase):
             self.assertFalse(rows[1]['ready']);self.assertFalse(rows[2]['ready'])
             self.assertEqual((root/Path(get_target('kuwana').reference_files['tops']).name).read_bytes(),b'test')
 
+    def test_sawa_special_references_found_without_private_manifest(self):
+        with tempfile.TemporaryDirectory() as t:
+            root=Path(t)
+            for stem in ('c_aw_sawa','c_aw_sawa_18','c_aw_sawa_dead','c_aw_sawa_sit'):
+                (root/(stem+'.gmd')).write_bytes(b'synthetic reference')
+            (root/'c_cw_f_amasawa.gmd').write_bytes(b'other person')
+            rows=availability('sawa',source_root=root)
+            self.assertEqual(len(rows),4)
+            self.assertTrue(all(r['ready'] and not r['validated'] for r in rows))
+            self.assertEqual(Path(target_references('sawa__sitting',source_root=root)['tops']).name,'c_aw_sawa_sit.gmd')
+
     def test_differing_duplicate_fails(self):
         with tempfile.TemporaryDirectory() as t:
             root=Path(t);(root/'other').mkdir()

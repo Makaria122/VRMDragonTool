@@ -187,6 +187,8 @@ class DragonWindow:
             messagebox.showerror('参照検索',str(exc));return
         text='\n'.join(r['id']+(' [参照発見・検証は生成時]' if r['ready'] else ' [不足] '+r['reason']) for r in rows)
         text+='\n\n登録した構成だけが対象です。未登録の若年・死亡・特殊姿勢等のモデルは自動置換しません。'
+        if self.target_id.get()=='sawa':
+            text+='\nSawaは承認済みの18歳用候補・死亡用候補・座り用候補も対象です。ゲーム内の姿勢・表情は未確認です。'
         messagebox.showinfo('モデル切替対象（ゲーム内切替は未確認）',text)
 
     def choose_source(self):

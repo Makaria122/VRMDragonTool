@@ -156,6 +156,8 @@ def run(vrm: str | Path, references: dict[str,str | Path], blender: str | Path,
             manifest['images'].append({'image_index':None,'filename':filename,
                 'sha256':hashlib.sha256(dummy_target.read_bytes()).hexdigest(),'role':'game_dummy_map'})
         manifest['dummy_texture_slots']=dummy_names
+        from um.dragon_neutral_maps import POLICY
+        manifest['dummy_texture_format_policy']=POLICY if not dummy_texture_dir else 'user-supplied'
         manifest_path.write_text(json.dumps(manifest,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
         inventory=output/'inventory.json'
         _blender(blender,preview,'dragon_generic_inventory.py',[output/'bone_map.json',inventory],progress)

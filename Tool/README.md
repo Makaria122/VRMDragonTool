@@ -16,7 +16,7 @@ Generates review-only replacement mod candidates from a VRM, using GMD files tha
 | GMD add-on | Bundled in `Tool/vendor/yakuza-gmd-gmt-blender` (GPL v3, separate license; built on the work of TheTurboTurnip and mosamadeeb, see `THIRD_PARTY_NOTICES.md`). Nothing to install in Blender. |
 | Your game data | A **Chara folder you extracted yourself** from your own copy of Lost Judgment. This project does not explain or provide extraction. The game does not have to be running or even installed to convert; it is only needed to try the result. |
 | A VRM | A humanoid VRM you are allowed to use. It is read through Blender's glTF importer. |
-| Disk space | Blender is about 1 GB. Each converted model keeps about 0.2 GB of working files in `Tool/userdata/outputs` (a full switch-target batch can reach several GB; clean up in the "Storage" tab). The detailed mode (local AI) adds about 1.8 GB for Ollama and about 4.4 GB for the model. |
+| Disk space | Blender is about 1 GB. Each converted model keeps about 0.2 GB of working files in `Tool/userdata/outputs` (a full switch-target batch can reach several GB; clean up in the "Storage & logs" page). The detailed mode (local AI) adds about 1.8 GB for Ollama and about 4.4 GB for the model. |
 | Memory | Not measured. Large avatars need several GB of RAM in Blender. The detailed mode loads a 7B model (about 5 GB), so keep roughly that much RAM/VRAM free. |
 | Internet | Only for the explicit AI downloads of the detailed mode. Conversion itself works offline. |
 
@@ -25,19 +25,19 @@ Generates review-only replacement mod candidates from a VRM, using GMD files tha
 1. **Get the tool.** Either `git clone https://github.com/Makaria122/VRMDragonTool.git` or use "Code → Download ZIP" on GitHub and extract it. Put it in a normal folder (for example `D:/Tools/VRMDragonTool`), not inside the game folder or a mod manager's folder.
 2. **Install Python 3.10+** from python.org. Tick "Add python.exe to PATH" and keep "tcl/tk and IDLE". Check it with `python -c "import tkinter"` in a terminal; if that prints an error, Tkinter is missing.
 3. **Install Pillow** without touching your global Python: open a terminal in the tool folder and run `python -m pip install --target Tool/runtime/python-packages -r Tool/requirements.txt` (a plain `python -m pip install -r Tool/requirements.txt` also works).
-4. **Blender 4.5 LTS.** Nothing to do by hand: when you first start the tool and no Blender is found, it asks whether to download Blender 4.5.14 (about 400 MB, about 1 GB unpacked) from the official server `download.blender.org`. The download is checked against a pinned SHA-256 checksum and installed only into `Tool/runtime/blender`; nothing is downloaded without your confirmation. You can also start or repeat it from the "Blender" tab, or choose a `blender.exe` you already have ("Choose my own blender.exe..."; the choice is remembered). The tool also finds Blender automatically at `Tool/runtime/blender/blender.exe` or `Blender/blender.exe` next to `Start-Tool.cmd`.
+4. **Blender 4.5 LTS.** Nothing to do by hand: when you first start the tool and no Blender is found, it asks whether to download Blender 4.5.14 (about 400 MB, about 1 GB unpacked) from the official server `download.blender.org`. The download is checked against a pinned SHA-256 checksum and installed only into `Tool/runtime/blender`; nothing is downloaded without your confirmation. You can also start or repeat it from the Setup page, or choose a `blender.exe` you already have ("Choose my own blender.exe..."; the choice is remembered). The tool also finds Blender automatically at `Tool/runtime/blender/blender.exe` or `Blender/blender.exe` next to `Start-Tool.cmd`.
 5. **Start the tool** by double-clicking `Start-Tool.cmd` (or run `python Tool/launch.py`). If it says Python 3.10+ with Tkinter was not found, repeat step 2.
 6. **Optional, detailed mode only:** see "Setup for the detailed mode" below. The default simple mode needs no AI.
 
 ## Quick start
 
-1. Start the tool (`Start-Tool.cmd`). You are on the "One-click mod" tab.
-2. **Extracted Chara folder → "Browse / search...":** choose the Chara folder you extracted from the game. The tool searches it recursively for the registered GMD files.
-3. **Target character:** pick the character whose model you want to replace. The tops/face/hair reference fields fill in by themselves. If the status line says references are missing, the folder does not contain that character's files.
-4. **VRM (required) → "Browse...":** choose your VRM.
-5. Check that the **Blender executable** and **GMD add-on folder** fields are filled (Blender is filled in after the download or when you choose it).
-6. Leave **Profile creation** on "Simple" unless you want the local AI. Leave the switch-target checkbox on to also convert the character's other outfits and cutscene models, or turn it off to convert only the base model (faster, less disk space).
-7. Press **"Create mod pack from VRM automatically (beta, no game install)"**. Progress appears in the status line at the bottom; expect a few minutes per model. Do not close the window while it runs.
+1. Start the tool (`Start-Tool.cmd`). You are on the **Convert** page. Language and theme (light/dark) are under **Settings**.
+2. **1. Character → "Any Dragon Engine game" (default):** open "Add a character", choose the folder with the files you extracted from your game, type the character's name (for example `ichiban`) and press Search. Every body, face and hair GMD with that name is found and checked; tick the ones you want (undressed, swimwear, dead, other-age, test and special-pose models start unticked) and press "Add this character". Saved characters stay in the list. For Lost Judgment's built-in characters pick "Lost Judgment: built-in characters" instead and give the Chara folder under "Advanced".
+3. **2. Avatar:** choose your VRM.
+4. **3. Options:** leave **Profile creation** on "Simple" unless you want the local AI. Leave "Also convert every other part of the character" on to convert all outfits, hair styles and faces, or turn it off to convert only the base model (faster, less disk space).
+5. Blender: if none is found, the **Setup** page downloads it or lets you choose your own `blender.exe`.
+6. Press **Convert**. Progress appears at the bottom; expect a few minutes per model. Do not close the window while it runs.
+7. Adjust nothing else: reference files and paths are under "Advanced: reference files and paths" and normally fill in by themselves.
 8. When it finishes, Windows Explorer opens the finished mod folder: the one that contains `mod-meta.yaml` and `chara/`. It lives in a `ReviewPack/Mods/` folder under `Tool/userdata/outputs/VRM_<character>_<vrm name>_<date>/`. `MODLOG.md` inside it lists what was checked, and `VARIANT_REVIEW_WARNING.txt` appears when checks failed or were not run.
 
 ### Using the result
@@ -50,22 +50,22 @@ The tool never installs anything. The generated folder uses the Mods format (wit
 |---|---|
 | `Start-Tool.cmd` says Python 3.10+ with Tkinter was not found | Install Python from python.org with "tcl/tk and IDLE", and make sure `python` is on PATH. |
 | "Missing/duplicate references" in the status line | The selected Chara folder does not contain that character's registered GMD files, or two files with the same name differ. Pick the right folder or another character. |
-| Blender or add-on field is empty | Open the "Blender" tab and download Blender, or choose your own `blender.exe`. The add-on folder is `Tool/vendor/yakuza-gmd-gmt-blender`. |
+| Blender or add-on field is empty | Open the Setup page and download Blender, or choose your own `blender.exe`. The add-on folder is `Tool/vendor/yakuza-gmd-gmt-blender`. |
 | The Blender download fails | Check your internet connection, proxy or firewall (the tool contacts only `download.blender.org`) and that about 2.5 GB are free. A failed or cancelled download leaves nothing half-installed. You can instead download Blender 4.5 LTS yourself and choose its `blender.exe`. |
-| A conversion stops with an error | Read the message, then open the "Logs" tab, press "Create debug report" and attach the file when you report it (see "Reporting a problem"). |
-| The disk fills up | Open the "Storage" tab and delete old output folders, or only their working `.blend` files. |
+| A conversion stops with an error | Read the message, then open the "Storage & logs" page, press "Create debug report" and attach the file when you report it (see "Reporting a problem"). |
+| The disk fills up | Open the "Storage & logs" page and delete old output folders, or only their working `.blend` files. |
 | It works but the result looks wrong in the game | Expected for now: see the warning at the top. Report it with the avatar's name and the character you replaced. |
 
 ## Profile modes
 
-Choose the mode under "Profile creation" on the "One-click mod" tab. Your last choice is saved.
+Choose the mode under "Profile creation" on the Convert page. Your last choice is saved.
 
 - **Simple (default, no AI):** mesh regions (tops/face/hair) come from the rule-based classification of the inspection step; head accessories the rules cannot classify become tops. A weight group that exists only in the VRM is assigned to the nearest matched ancestor bone in the VRM's bone hierarchy. The "detailed mode" setup below is not needed. If the rules cannot decide (a region is missing, or a bone has no matched ancestor) the tool stops and says why. The result goes through the same validation as the detailed mode.
 - **Detailed (local AI):** the previous behaviour. A tool-owned Ollama/Qwen proposes the classification and bone mapping, and the result goes through the same validation. Set it up as follows.
 
 ## Setup for the detailed mode (local AI, optional)
 
-1. Open the "AI setup" tab → "Set up Ollama" and confirm. The official Windows portable release is verified with SHA-256 and placed in `Tool/runtime/ollama`. It needs roughly 1.5 GB of download plus extraction/temporary space.
+1. Open the Setup page → "Set up Ollama" and confirm. The official Windows portable release is verified with SHA-256 and placed in `Tool/runtime/ollama`. It needs roughly 1.5 GB of download plus extraction/temporary space.
 2. Press "Download Qwen". `qwen2.5-coder:7b` is about 5 GB, so make sure you have enough disk space and RAM/VRAM. Models are stored in `Tool/runtime/models`.
 
 Downloads only happen on these explicit actions. Conversion never downloads Ollama or a model by itself, and the tool never connects to an existing global Ollama.
@@ -77,10 +77,10 @@ Ollama runs as a separate process started from the executable inside the tool fo
 1. Select the **Chara folder** you extracted from your game. Registered GMD file names are searched recursively, whether the folder has the original layout, a per-model-ID layout or a flat layout.
 2. Choose the target character; the tops/face/hair references are filled in automatically. Layouts such as a single GMD, or face+hair combined, are resolved by registered recipes.
 3. If a reference is missing, the tool stops. It also stops when several GMDs share a name but differ in content; only identical duplicates are resolved deterministically. A different character or outfit is never substituted just because the bone count matches.
-4. Select the VRM, Blender and the add-on, then press "Create mod pack from VRM automatically (beta, no game install)". This runs mesh classification and bone mapping (rules in simple mode, local AI in detailed mode), anatomical fitting, material assignment, GMD export and a strict re-import.
-5. To also generate outfit/event/cutscene variants, turn on "Also validate and generate switch targets whose references were found (unverified in-game)". It is on by default and your choice is remembered. Finding a reference is not a validation pass; validation happens when each variant is generated.
+4. Select the VRM, Blender and the add-on, then press "Convert". This runs mesh classification and bone mapping (rules in simple mode, local AI in detailed mode), anatomical fitting, material assignment, GMD export and a strict re-import.
+5. To also generate outfit/event/cutscene variants, turn on "Also convert every other part of the character". It is on by default and your choice is remembered. Finding a reference is not a validation pass; validation happens when each variant is generated.
 
-Each conversion leaves its working files (large working `.blend` files in particular) in `Tool/userdata/outputs`. Use the "Storage" tab to see the sizes and delete selected output folders, or only their working `.blend` files while keeping the generated mods. Deleting cannot be undone.
+Each conversion leaves its working files (large working `.blend` files in particular) in `Tool/userdata/outputs`. Use the "Storage & logs" page to see the sizes and delete selected output folders, or only their working `.blend` files while keeping the generated mods. Deleting cannot be undone.
 
 References are read-only. Local settings, profiles and outputs are stored under `Tool/userdata` (not tracked by Git). Those files contain your paths and asset information, so do not publish them. Keep the extracted folder itself outside any Git-managed folder.
 
@@ -127,7 +127,7 @@ Pick one body GMD (face and hair next to it in the usual `.../tops/<id>/<id>.gmd
 
 ## Reporting a problem
 
-If a conversion fails or looks wrong, open the "Logs" tab and press "Create debug report", then attach the generated `debug-report-*.txt` (in `Tool/userdata/logs`) to your issue together with the avatar's name or where it came from. The report holds the tool version fingerprint, Python/OS/Blender information, the most recent failed runs and the newest log, including the full Blender output of the failing step.
+If a conversion fails or looks wrong, open the "Storage & logs" page and press "Create debug report", then attach the generated `debug-report-*.txt` (in `Tool/userdata/logs`) to your issue together with the avatar's name or where it came from. The report holds the tool version fingerprint, Python/OS/Blender information, the most recent failed runs and the newest log, including the full Blender output of the failing step.
 
 Logs are kept on your machine only (about 12 MB at most). User names and home-folder paths are masked, but file names, avatar names and error text are not, so read the report before you post it. Do not attach your VRM, GMD or generated mod files.
 

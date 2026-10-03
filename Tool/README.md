@@ -1,5 +1,8 @@
 # VRM → Dragon Engine / Lost Judgment (experimental)
 
+> [!WARNING]
+> **Work in progress and unstable.** Conversions can fail for some avatars, in-game results are unverified and the accessory-bone geometry check currently fails on every tested output. See the [warning in the main README](../README.md) for the full list of known problems.
+
 Generates review-only replacement mod candidates from a VRM, using GMD files that **you extracted yourself from a game you own**. No game assets, VRMs, motion Actions or AI models are distributed. The tool never extracts game data and never installs anything into the game.
 
 ## First-time setup (Windows)

@@ -1,5 +1,18 @@
 # VRMDragonTool
 
+> [!WARNING]
+> # WORK IN PROGRESS (WIP): UNSTABLE
+>
+> **This project is unfinished and unstable.** Expect bugs, conversions that stop with an error, and results that look wrong in the game. Do not rely on it for anything important, and keep backups of your game files and mods. No guarantee of any kind is given.
+>
+> **Known unstable or unverified areas:**
+>
+> - **Conversion can fail for some avatars.** Only about ten avatars have been tried. VRMs that do not follow the usual layout can stop with an error: for example missing UVs, unweighted vertices, no measurable foot contact, non-humanoid bodies, missing bones, or a missing hair/face part for targets that need a separate GMD for it.
+> - **In-game appearance is not verified.** Results are review candidates only. Native animation, expressions, hair transparency, bone sway and model switching have not been confirmed in the game, and the metallic-look fix is unconfirmed.
+> - **The accessory-bone geometry check currently fails on every tested output** (`GEOMETRY_CHECK_FAILED`), so hair, tails, skirts and similar parts may look broken.
+> - **Most characters and outfits are experimental.** Seated, young-era and dead-state models and unusual poses (for example avatars with hanging arms) have only been checked up to the export round trip.
+> - **The detailed mode (local AI) has not been tested on a clean machine**, and the GUI, options and file formats may change without notice.
+
 An experimental tool that generates VRM replacement mods for Lost Judgment. It does not install anything into the game and does not extract game data. Each user supplies the Chara folder extracted from a game they own, and a VRM they have the right to use.
 
 **For setup, usage and limitations, see [Tool/README.md](Tool/README.md).**

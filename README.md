@@ -1,18 +1,18 @@
 # VRMDragonTool
 
-Lost Judgment向けVRM置換MODを生成する実験用ツールです。ゲームへの導入やゲームデータの抽出は行いません。各利用者が所有ゲームから抽出したCharaフォルダと、自分が利用権を持つVRMを指定してください。
+An experimental tool that generates VRM replacement mods for Lost Judgment. It does not install anything into the game and does not extract game data. Each user supplies the Chara folder extracted from a game they own, and a VRM they have the right to use.
 
-**セットアップ・操作・制限事項は[Tool/README.md](Tool/README.md)を参照してください。**
+**For setup, usage and limitations, see [Tool/README.md](Tool/README.md).** (The GUI itself is currently in Japanese.)
 
-- AI不要の簡易モード（既定）と、Tool専用Ollama／Qwenを使う詳細モード。グローバルOllamaには接続しません。
-- 抽出済みフォルダから登録キャラクター・衣装の参照GMDを検索。
-- 骨格グループごとの調整と、モデルごとのstrict書出し・材質検証。
-- 動作Actionは任意。未提供なら動作検査未実施のレビュー候補として出力。
+- An AI-free simple mode (default) and a detailed mode that uses a tool-owned Ollama/Qwen. The tool never connects to a global Ollama.
+- Looks up the reference GMDs of registered characters and outfits in your extracted folder.
+- Per-skeleton-group adjustment, plus strict export and material validation for every model.
+- Motion Actions are optional. Without one, output is a review candidate whose motion check was not run.
 
-生成物のゲーム内表示・native動作・全モデル切替は保証しません。動作検査不合格／未実施を合格と扱わないでください。
+In-game appearance, native motion and every model switch are not guaranteed. Do not treat a failed or skipped motion check as a pass.
 
-## 公開前に
+## Before publishing
 
-`python Tool/export_public.py --output PublicRelease`で私用データを除外した配布用フォルダを作成します。元の作業フォルダ全体をアップロードしないでください。
+`python Tool/export_public.py --output PublicRelease` creates a distribution folder with private data excluded. Do not upload your whole working folder.
 
-自己作成コード・文書は[MITライセンス](LICENSE)です。改良・再配布・商用利用を歓迎します。同梱アドオンなどの第三者部分には各々のライセンスが適用されます。詳細は[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。ゲーム資産・VRM・AIモデルを含む再配布権を付与するものではありません。GitHubへの公開操作はこのツールでは行いません。
+Original code and documents are under the [MIT License](LICENSE); improvements, redistribution and commercial use are welcome. Third-party parts such as the bundled add-on keep their own licenses; see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). This grants no right to redistribute game assets, VRMs or AI models. This tool does not perform any GitHub publishing for you.

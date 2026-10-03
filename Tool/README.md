@@ -1,63 +1,65 @@
-# VRM → Dragon Engine / Lost Judgment（実験版）
+# VRM → Dragon Engine / Lost Judgment (experimental)
 
-利用者が所有するゲームから自分で抽出したGMDを参照し、VRMのレビュー用MOD候補を生成します。ゲーム資産・VRM・動作Action・AIモデルは配布しません。抽出やゲームへの導入は行いません。
+Generates review-only replacement mod candidates from a VRM, using GMD files that **you extracted yourself from a game you own**. No game assets, VRMs, motion Actions or AI models are distributed. The tool never extracts game data and never installs anything into the game.
 
-## 初回セットアップ（Windows）
+> The GUI is currently in Japanese. UI labels are quoted below in Japanese with an English description.
 
-1. Python 3.10以上（Tkinter付き）とBlender 4.5系を用意します。Python/Tkinter自体は現在別途必要です。BlenderはGUIで指定でき、`Tool/runtime/blender/blender.exe`に配置しても構いません。
-2. Pillowが必要です。グローバル環境を変更しない導入例：`python -m pip install --target Tool/runtime/python-packages -r Tool/requirements.txt`。
-3. `Start-Tool.cmd`から起動します。
+## First-time setup (Windows)
 
-### プロファイル作成モード
+1. Prepare Python 3.10+ (with Tkinter) and Blender 4.5.x. Python/Tkinter must currently be installed separately. Blender can be selected in the GUI, or placed at `Tool/runtime/blender/blender.exe`.
+2. Pillow is required. Example that does not touch your global environment: `python -m pip install --target Tool/runtime/python-packages -r Tool/requirements.txt`.
+3. Start the tool with `Start-Tool.cmd`.
 
-変換タブの「プロファイル作成」で選びます（最後の選択は保存されます）。
+### Profile modes
 
-- **簡易（既定・AI不要）**：メッシュの区分（tops/face/hair）は点検結果のルール判定を使い、判定できない頭部アクセサリーはtopsにします。VRMだけにある骨は、骨の親子をたどって最も近い対応済みの骨に割り当てます。下の「詳細モード」のセットアップは不要です。ルールで判断できないとき（領域が欠ける、割り当て先を決められない骨がある）は、理由を示して停止します。結果の検証は詳細モードと同じです。
-- **詳細（ローカルAI）**：従来どおりTool専用のOllama／Qwenで分類・骨対応を提案させ、結果を同じ検証にかけます。次の手順でセットアップします。
+Choose the mode under "プロファイル作成" (profile creation) on the conversion tab. Your last choice is saved.
 
-詳細モードを使う場合のセットアップ：
+- **Simple (default, no AI):** mesh regions (tops/face/hair) come from the rule-based classification of the inspection step; head accessories the rules cannot classify become tops. A weight group that exists only in the VRM is assigned to the nearest matched ancestor bone in the VRM's bone hierarchy. The "detailed mode" setup below is not needed. If the rules cannot decide (a region is missing, or a bone has no matched ancestor) the tool stops and says why. The result goes through the same validation as the detailed mode.
+- **Detailed (local AI):** the previous behaviour. A tool-owned Ollama/Qwen proposes the classification and bone mapping, and the result goes through the same validation. Set it up as follows.
 
-4. 「AIセットアップ」→「Ollamaをセットアップ」を押して確認します。公式Windows portable版をSHA-256検証後に`Tool/runtime/ollama`へ配置します。約1.5GBの通信量と、展開・一時ファイルを含む追加容量が必要です。
-5. 「Qwenをダウンロード」を押します。`qwen2.5-coder:7b`は約5GBです。十分なディスク容量・RAM/VRAMを確保してください。モデルは`Tool/runtime/models`に保存します。
+Setup for the detailed mode only:
 
-ダウンロードは明示的な操作時だけ実行します。変換時にOllamaやモデルを勝手にダウンロードすることはありません。既存のグローバルOllamaには接続しません。
+4. Open "AIセットアップ" (AI setup) → "Ollamaをセットアップ" (set up Ollama) and confirm. The official Windows portable release is verified with SHA-256 and placed in `Tool/runtime/ollama`. It needs roughly 1.5 GB of download plus extraction/temporary space.
+5. Press "Qwenをダウンロード" (download Qwen). `qwen2.5-coder:7b` is about 5 GB, so make sure you have enough disk space and RAM/VRAM. Models are stored in `Tool/runtime/models`.
 
-OllamaはTool内の実行ファイルから起動する別プロセスです。専用のループバックポートと保存先を使い、モデル要求は`keep_alive: 0`でアンロードします。GUI終了時にはツールが起動したプロセスだけを停止します。OS・GPUドライバーそのものの動作までTool内に封じ込めるサンドボックスではありません。
+Downloads only happen on these explicit actions. Conversion never downloads Ollama or a model by itself, and the tool never connects to an existing global Ollama.
 
-## 生成手順
+Ollama runs as a separate process started from the executable inside the tool folder, with a dedicated loopback port and storage, and model requests unload with `keep_alive: 0`. When the GUI/CLI exits, only processes the tool started are stopped. This is not an OS/GPU-driver sandbox.
 
-1. 所有ゲームから抽出済みの**Charaフォルダ**を選択します。元の階層・モデルID別整理済み階層・平坦な配置から、登録GMDのファイル名を再帰検索します。
-2. 対象キャラクターを選ぶと胴体・顔・髪の参照が自動入力されます。単一GMD／顔＋髪統合などの構成も登録済みレシピで解決します。
-3. 参照不足なら停止します。同名GMDが複数あり内容が異なる場合も停止します。同一内容の重複だけは決定的に選びます。骨数が同じという理由だけで別人物・別衣装を代用しません。
-4. VRM、Blender、アドオンを指定して「自動作成」を押します。選んだモードによるメッシュ分類・骨対応（簡易はルール、詳細はローカルAI）、解剖学的補正、材質割当て、GMD書出し・strict再読込を実行します。
-5. 衣装・イベント用も含める場合は「参照が見つかった切替先も個別検証・生成」をONにします。参照の発見は検証合格ではありません。実際の検証は各構成の生成時に行います。
+## Generation steps
 
-参照元は読み取り専用です。ローカル設定・プロフィール・出力は`Tool/userdata`以下（Git対象外）に保存します。ファイルには利用者のパスやアセット情報が含まれるため公開しないでください。抽出フォルダ自体もGit管理フォルダの外に置いてください。
+1. Select the **Chara folder** you extracted from your game. Registered GMD file names are searched recursively, whether the folder has the original layout, a per-model-ID layout or a flat layout.
+2. Choose the target character; the tops/face/hair references are filled in automatically. Layouts such as a single GMD, or face+hair combined, are resolved by registered recipes.
+3. If a reference is missing, the tool stops. It also stops when several GMDs share a name but differ in content; only identical duplicates are resolved deterministically. A different character or outfit is never substituted just because the bone count matches.
+4. Select the VRM, Blender and the add-on, then press "自動作成" (create automatically). This runs mesh classification and bone mapping (rules in simple mode, local AI in detailed mode), anatomical fitting, material assignment, GMD export and a strict re-import.
+5. To also generate outfit/event/cutscene variants, turn on "参照が見つかった切替先も個別検証・生成" (also validate and generate switch targets whose references were found). It is on by default and your choice is remembered. Finding a reference is not a validation pass; validation happens when each variant is generated.
 
-### 動作検査は任意
+References are read-only. Local settings, profiles and outputs are stored under `Tool/userdata` (not tracked by Git). Those files contain your paths and asset information, so do not publish them. Keep the extracted folder itself outside any Git-managed folder.
 
-利用者が用意した動作Action `.blend`を指定した場合、対象モデルごとの元GMD基準と比較します。Actionがなければ`motion_validation: MOTION_NOT_RUN`とし、動作品質の合格を宣言しません。別途の補助骨・形状検査が不合格なら`GEOMETRY_CHECK_FAILED`も記録します。生成物は常にレビュー候補です。Actionを指定する場合も、対象人物のnativeアニメーションでなければプロキシ診断にすぎません。
+### Motion checks are optional
 
-### 対応・注意点
+If you provide a motion Action `.blend`, each model is compared against its original GMD baseline. Without an Action the result is `motion_validation: MOTION_NOT_RUN`, and the tool never claims a motion-quality pass. A separate failing accessory-bone/geometry check is recorded as `GEOMETRY_CHECK_FAILED`. Output is always a review candidate. Even with an Action, anything other than the target character's native animation is only a proxy diagnostic.
 
-- Yagami、Kaito、およびSugiura、Tsukumo、Saori、Higashi、Tesso、Kuwana、Soma、Akutsu、Genda、Hoshino、Mafuyu、Sawaを実験登録しています。
-- 登録された一部の衣装・イベント・カットシーン用構成にも対応。Kuwanaはc04bd01／c10bd01／armyの胴体と、利用者承認済みの若年期`c_cm_x_kuwana_30`（顔を胴体GMDに含む単一GMD）を含みます。Yagamiはc07bd01／c07bd02と座り姿勢のc07_chairも対象です（座りは脚を目標の骨の向きに合わせて補正します）。これらはstrict往復までの確認で、ゲーム内の姿勢・表情・切替は未確認です。Sawaは利用者承認済みの`c_aw_sawa_18`・`c_aw_sawa_dead`・`c_aw_sawa_sit`も切替先生成の対象です。通常を含む4構成を各々のGMDへ書き出します。Sawaの追加3構成は参照strict往復に成功しましたが、若年・死亡・座り時のゲーム内姿勢と表情は未確認です。別人物のAmasawaは含めません。全ゲーム内切替を網羅したわけではありません。
-- 同一人物・同一VRMでも、骨名・親・rest行列等の実測が一致するグループだけ調整を共有します。服依存の接地位置は毎回測り直し、材質・書出し・strict検証は各モデルで行います。
-- 接地面は足／つま先に25%以上ウェイトされた頂点のうち、足首より下の支持面から測定します。包帯などの名前だけでは床を決めません。測れない場合は要レビューで停止します。
-- diffuseはVRMから生成。補助4枠（multi/normal/rt/rd）は独自に生成する中立DDSを必ず割り当てます。DDSとGMD参照は対象人物＋VRM内容ハッシュの名前空間に分離します。
-- 中立DDSは以前のダミーと同じ保存形式へ合わせます。multiは4×4 DXT1/BC1（3 mip）、whiteはDXT1/BC1（1 mip）、normal/rtは非圧縮BGRA8です。RGBAへの一律変更は法線のチャンネル解釈・材質反応を変える恐れがあるため使用しません。色は独自の定数から生成し、ゲームDDSは同梱しません。`texture-map.json`の`dummy_texture_format_policy: neutral-bc1-bgra-v2`で確認できます。Pillow/Blenderでの読み込みと色を検証しますが、ゲーム内で金属感が解消したかは別途確認が必要です。
-- 服・素体に眼周囲用デカール材質を流用しないmatte方針を維持します。strict成功は髪の透過・照明・表情・骨揺れ・native動作の合格ではありません。
-- 同じキャラクターの同じ置換先に複数MODを有効化すると競合します。複数MODの統合機能は内容が異なる同名パスを拒否します。
+### Supported targets and caveats
 
-## 公開用ソースの作成
+- Yagami, Kaito, and experimentally Sugiura, Tsukumo, Saori, Higashi, Tesso, Kuwana, Soma, Akutsu, Genda, Hoshino, Mafuyu and Sawa are registered.
+- Some registered outfit, event and cutscene layouts are supported too. Kuwana includes the `c04bd01`, `c10bd01` and `army` tops, plus the user-approved young-era `c_cm_x_kuwana_30` (a single GMD that contains the face). Yagami also covers `c07bd01`, `c07bd02` and the seated `c07_chair` (for seated poses the legs are fitted to the target's bone directions). These were only checked up to the strict round trip; in-game posture, expression and switching are unverified. For Sawa, the user-approved `c_aw_sawa_18`, `c_aw_sawa_dead` and `c_aw_sawa_sit` are also part of switch-target generation, giving four layouts including the normal one, each written to its own GMD. The three extra Sawa layouts passed the reference strict round trip, but their in-game posture and expression for young/dead/seated states are unverified. The different character Amasawa is not included. Not every in-game model switch is covered.
+- Even for the same character and the same VRM, adjustments are shared only between groups whose measured bone names, parents and rest matrices match. Outfit-dependent ground contact is measured again every time, and materials, export and strict validation run per model.
+- The ground plane is measured from vertices weighted at least 25% to the foot/toes, using the support surface below the ankle. A name such as "bandage" never decides the floor. If it cannot be measured, the tool stops for review.
+- Diffuse maps are generated from the VRM. The four auxiliary slots (multi/normal/rt/rd) always get procedurally generated neutral DDS files. DDS and GMD references are separated into a namespace made from the target character plus the VRM content hash.
+- Neutral DDS files use the same storage formats as the earlier dummy maps: multi is 4×4 DXT1/BC1 (3 mips), white is DXT1/BC1 (1 mip), and normal/rt are uncompressed BGRA8. Changing everything to RGBA would risk altering normal-map channel interpretation and material response, so it is not done. Colours are generated from our own constants and no game DDS is bundled. You can confirm this with `dummy_texture_format_policy: neutral-bc1-bgra-v2` in `texture-map.json`. Loading and colours are checked with Pillow/Blender, but whether the metallic look is gone in-game still has to be checked separately.
+- The matte policy is kept: eye-surround decal materials are not reused on clothing or body. A strict-export success does not mean hair transparency, lighting, expressions, bone sway or native motion pass.
+- Enabling several mods for the same replacement target of the same character conflicts. The multi-mod merge refuses same-named paths with different content.
 
-リポジトリのルート全体をそのままアップロードしないでください。
+## Building the public source
+
+Do not upload the whole repository root as is.
 
 ```powershell
 python Tool/export_public.py --output PublicRelease
 python -m unittest discover -s Tool/tests -v
 ```
 
-明示的な許可リストでソース・テスト・文書・アドオンとライセンスだけをコピーし、配布用manifestを生成します。`Tool/runtime`、`Tool/userdata`、私用資産、生成MOD、私用履歴は除外します。既存の出力先は上書きしません。GitHubへのpushは行いません。
+An explicit allowlist copies only source, tests, documents, the add-on and licenses, and generates a distribution manifest. `Tool/runtime`, `Tool/userdata`, private assets, generated mods and private history are excluded. An existing output folder is never overwritten. The script never pushes to GitHub.
 
-自己作成コード・文書はMITライセンスです。`Tool/vendor/`などの第三者部分は各々のライセンスに従います。公開前に`THIRD_PARTY_NOTICES.md`と依存物のライセンスを確認してください。モデル・VRM・ゲーム由来ファイルの再配布権が得られるわけではありません。
+Original code and documents are MIT licensed. Third-party parts such as `Tool/vendor/` follow their own licenses. Check `THIRD_PARTY_NOTICES.md` and the licenses of your dependencies before publishing. This does not grant any right to redistribute models, VRMs or game-derived files.

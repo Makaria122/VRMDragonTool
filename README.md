@@ -18,7 +18,7 @@ An experimental tool that generates VRM replacement mods for Lost Judgment. It d
 **For setup, usage and limitations, see [Tool/README.md](Tool/README.md).**
 
 - An AI-free simple mode (default) and a detailed mode that uses a tool-owned Ollama/Qwen. The tool never connects to a global Ollama.
-- Looks up the reference GMDs of registered characters and outfits in your extracted folder.
+- Looks up the reference GMDs of registered characters and outfits in your extracted folder, and can register your own GMD files from other Dragon Engine games as a custom target (experimental, see [Tool/README.md](Tool/README.md)).
 - Per-skeleton-group adjustment, plus strict export and material validation for every model.
 - Motion Actions are optional. Without one, output is a review candidate whose motion check was not run.
 

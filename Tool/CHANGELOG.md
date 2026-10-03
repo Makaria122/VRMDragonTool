@@ -1,5 +1,10 @@
 # Changes
 
+## Custom targets: GMD files from other Dragon Engine games
+- New "Other (add your own GMD files)..." entry in the target list: pick a body GMD (face/hair next to it are found automatically), the tool inspects it in Blender (read-only), checks the skeleton and registers a custom target in `Tool/userdata/targets/` with private copies of the files (SHA-256 checked on every use; the originals, even inside a game folder, are never changed). Layouts: body only (single GMD), body+face, or body+face+hair; output keeps `chara/<region>/<name>/<name>.gmd`. A skeleton without the required bones is refused with the names of the missing bones. No switch targets for custom targets.
+- First real case: Like a Dragon 8 Ichiban (297 bones, all 51 expected bone names present): a VRM converted to three GMDs and fits the skeleton in Blender. In-game behaviour is unverified.
+- "Remove custom target" button. 19 new tests.
+
 ## Fixes found by a fresh GitHub download
 - The shader file the bundled GMD add-on needs (`yakuza_shader.blend`) was missing from the public repository; it is now exported byte for byte (every other `.blend` stays private) and `.blend` is marked binary in `.gitattributes`.
 - Avatars with textures whose size is not a multiple of 4 (for example the common 2x2 flat-colour images) no longer stop the conversion: images are resampled so each side is a multiple of 4, textures larger than 4096 px are scaled down to at most 4096 (sources up to 8192 px are accepted), and WebP images are accepted too. Resampling keeps the 0..1 UV mapping valid; the original size is recorded as `resized_from` in `texture-map.json`.

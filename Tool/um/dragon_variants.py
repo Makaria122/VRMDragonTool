@@ -112,8 +112,12 @@ def availability(base, private_data=None, source_root=None):
         from um.dragon_asset_catalog import available_references
         rows = []
         for key in variants_for(base):
-            found = available_references(get_target(key).reference_files, source_root)
-            present = len(found) == len(get_target(key).reference_files)
+            spec = get_target(key)
+            if spec.custom_references is not None:  # private copies, independent of the Chara folder
+                present = all(Path(p).is_file() for p in spec.custom_references.values())
+            else:
+                found = available_references(spec.reference_files, source_root)
+                present = len(found) == len(spec.reference_files)
             rows.append({'id': key, 'ready': present,
                          'reason': '' if present else 'registered reference(s) missing; strict validation pending',
                          'found': present, 'validated': False})

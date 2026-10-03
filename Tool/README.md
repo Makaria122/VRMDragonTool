@@ -100,6 +100,16 @@ If you provide a motion Action `.blend`, each model is compared against its orig
 - The matte policy is kept: eye-surround decal materials are not reused on clothing or body. A strict-export success does not mean hair transparency, lighting, expressions, bone sway or native motion pass.
 - Enabling several mods for the same replacement target of the same character conflicts. The multi-mod merge refuses same-named paths with different content.
 
+## Characters from other Dragon Engine games (custom targets)
+
+Besides the registered Lost Judgment characters you can add your own: choose **"Other (add your own GMD files)..."** in the target list.
+
+1. Pick the body GMD (`tops`) of a character from a game you extracted yourself. If the face and hair GMDs sit next to it in the usual layout (`.../tops/<id>/<id>.gmd`, `.../face/...`, `.../hair/...`) they are found automatically and you are asked whether to add them; you can also pick them by hand or leave them out (then everything goes into the one body GMD).
+2. The tool reads the files once with Blender (read-only), checks that the skeleton has the bones its fitting needs (the Dragon Engine bone names such as `ketu_c_n`, `kubi_c_n`, `ude1_l_n`, `asi3_l_n`; finger bones are optional) and that all files share one skeleton, then keeps **private copies** in `Tool/userdata/targets/`. The original files, even inside a game folder, are never changed and are not used again afterwards.
+3. The new target appears in the list and works like the built-in ones (profile creation, fitting, strict export check, Mods-format output). The output keeps the game's layout: `chara/<tops|face|hair>/<name>/<name>.gmd`. "Remove custom target" deletes the copies.
+
+Notes and limits: switch targets (outfit/event variants) are not available for custom targets; a skeleton with different bone names is refused with the list of missing bones; materials and shaders of other games may differ, so in-game results are unverified. The author tested this with the Like a Dragon 8 character Ichiban (297-bone skeleton): the conversion runs to the end and the model sits correctly on the skeleton in Blender, but it has not been checked in the game.
+
 ## Reporting a problem
 
 If a conversion fails or looks wrong, open the "Logs" tab and press "Create debug report", then attach the generated `debug-report-*.txt` (in `Tool/userdata/logs`) to your issue together with the avatar's name or where it came from. The report holds the tool version fingerprint, Python/OS/Blender information, the most recent failed runs and the newest log, including the full Blender output of the failing step.

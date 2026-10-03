@@ -15,6 +15,7 @@ from um import dragon_log
 from um.dragon import inspect, inspect_blender, roundtrip_gmd
 
 
+OTHER_ENTRY = 'Other (add your own GMD files)...'
 LOG_HINT = 'Details were saved to the log. Open the Logs tab and create a debug report to share.'
 
 
@@ -70,10 +71,15 @@ class DragonWindow:
         target_row=ttk.Frame(frame);target_row.pack(fill='x',pady=(0,8))
         ttk.Label(target_row,text='Target character',width=30).pack(side='left')
         from um.dragon_targets import target_ids
+        self.last_target='yagami'
         target_box=ttk.Combobox(target_row,textvariable=self.target_id,state='readonly',
-                                values=target_ids(),width=16)
+                                values=list(target_ids())+[OTHER_ENTRY],width=30)
         target_box.pack(side='left',padx=4)
         target_box.bind('<<ComboboxSelected>>',self.select_target)
+        self.target_box=target_box
+        self.remove_target_button=ttk.Button(target_row,text='Remove custom target',command=self.remove_custom_target,
+                                             state='disabled')
+        self.remove_target_button.pack(side='left',padx=4)
         ttk.Label(target_row,text='Additional characters are experimental and need in-game checks').pack(side='left',padx=8)
         source_row=ttk.Frame(frame);source_row.pack(fill='x',pady=3)
         ttk.Label(source_row,text='Extracted Chara folder',width=30).pack(side='left')
@@ -238,9 +244,23 @@ class DragonWindow:
 
     def select_target(self, _event=None):
         from um.dragon_targets import get_target, target_references
+        if self.target_id.get()==OTHER_ENTRY:
+            self.target_id.set(self.last_target)
+            self.custom_target_dialog()
+            return
+        self.last_target=self.target_id.get()
         target=get_target(self.target_id.get())
         for role in ('tops','face','hair'):
             self.paths[role].set('')
+        self.remove_target_button.configure(state='normal' if target.custom_references is not None else 'disabled')
+        if target.custom_references is not None:
+            try:
+                for role,file in target_references(target.id).items():
+                    self.paths[role].set(file)
+                self.status.set(f'{target.label}: {target.bone_count} bones. {target.motion_note}')
+            except (OSError,ValueError) as exc:
+                self.status.set(str(exc))
+            return
         if not self.source_root.get().strip():
             self.status.set('Select the extracted Chara folder.')
             return
@@ -349,6 +369,108 @@ class DragonWindow:
         dragon_log.setup_logging()  # logging continues in a fresh file
         self.logs_status.set(f'Deleted {count} file(s).')
         self.logs_refresh()
+
+    def refresh_target_list(self):
+        from um.dragon_targets import target_ids
+        self.target_box.configure(values=list(target_ids())+[OTHER_ENTRY])
+
+    def custom_target_dialog(self):
+        from um import dragon_custom_targets as custom
+        from um.dragon_targets import target_ids
+        if not self.blender_usable():
+            messagebox.showinfo('Blender','Set up Blender first (see the Blender tab); it is needed to read the GMD files.')
+            return
+        nl=chr(10)
+        win=tk.Toplevel(self.root);win.title('Add a custom target');win.transient(self.root)
+        try:win.grab_set()
+        except tk.TclError:pass  # not viewable yet; the dialog still works
+        win.columnconfigure(1,weight=1)
+        ttk.Label(win,text='Use GMD files from any Dragon Engine game that you extracted yourself. The tool reads them once, '
+                  'checks that their skeleton fits, and keeps private copies in Tool/userdata/targets. The game folder is never '
+                  'changed. In-game results are unverified.',wraplength=560).grid(row=0,column=0,columnspan=3,sticky='w',padx=10,pady=(10,6))
+        values={role:tk.StringVar() for role in ('tops','face','hair')}
+        name=tk.StringVar()
+        def browse(role):
+            chosen=filedialog.askopenfilename(parent=win,title=f'Select the {role} GMD',filetypes=[('GMD files','*.gmd')])
+            if not chosen:return
+            values[role].set(chosen)
+            if role=='tops':
+                for other,found in custom.find_siblings(chosen).items():
+                    if not values[other].get():values[other].set(str(found))
+                if not name.get():name.set(Path(chosen).stem)
+        for row,(role,label) in enumerate((('tops','Body GMD (tops, required)'),('face','Face GMD (optional)'),
+                                           ('hair','Hair GMD (optional)')),start=1):
+            ttk.Label(win,text=label).grid(row=row,column=0,sticky='w',padx=10,pady=3)
+            ttk.Entry(win,textvariable=values[role],width=60).grid(row=row,column=1,sticky='we',pady=3)
+            ttk.Button(win,text='Browse...',command=lambda r=role:browse(r)).grid(row=row,column=2,padx=10)
+        ttk.Label(win,text='Name').grid(row=4,column=0,sticky='w',padx=10,pady=3)
+        ttk.Entry(win,textvariable=name,width=60).grid(row=4,column=1,sticky='we',pady=3)
+        state=tk.StringVar(value='Choose the body GMD; the face and hair GMDs next to it are found automatically.')
+        ttk.Label(win,textvariable=state,wraplength=560).grid(row=5,column=0,columnspan=3,sticky='w',padx=10,pady=8)
+        result_queue=queue.Queue()
+        buttons=ttk.Frame(win);buttons.grid(row=6,column=0,columnspan=3,pady=(0,10))
+        add_button=ttk.Button(buttons,text='Inspect and add');add_button.pack(side='left',padx=6)
+        ttk.Button(buttons,text='Close',command=win.destroy).pack(side='left',padx=6)
+        def finish():
+            try:kind,data=result_queue.get_nowait()
+            except queue.Empty:
+                win.after(150,finish);return
+            add_button.configure(state='normal')
+            if kind=='error':
+                state.set(data);messagebox.showerror('Custom target',data,parent=win);return
+            self.refresh_target_list()
+            self.target_id.set(data['id']);self.select_target()
+            note=(nl+nl+nl.join(data['warnings'])) if data['warnings'] else ''
+            messagebox.showinfo('Custom target',f"Added: {data['label']}{nl}{data['bone_count']} bones, layout {data['layout']}.{note}",parent=win)
+            win.destroy()
+        def add():
+            files={role:Path(var.get().strip()) for role,var in values.items() if var.get().strip()}
+            if 'tops' not in files:
+                state.set('Choose the body (tops) GMD first.');return
+            try:target_id=custom.sanitize_id(files['tops'].stem)
+            except custom.CustomTargetError as exc:
+                state.set(str(exc));return
+            siblings={role:found for role,found in custom.find_siblings(files['tops']).items() if role not in files}
+            if siblings and messagebox.askyesno('Custom target','The '+' and '.join(siblings)+' GMD found next to the body GMD '
+                                                 'can be added too (recommended for a full character). Add them?',parent=win):
+                files.update(siblings)
+                for role,found in siblings.items():values[role].set(str(found))
+            replace=False
+            if target_id in target_ids():
+                if not messagebox.askokcancel('Custom target','A custom target named '+target_id+' already exists. Replace it?',parent=win):return
+                replace=True
+            add_button.configure(state='disabled');state.set('Reading the GMD files with Blender...')
+            blender=Path(self.paths['blender'].get().strip());addon=Path(self.paths['addon'].get().strip())
+            label=name.get().strip() or None
+            def work():
+                try:
+                    inspections=custom.inspect_files(files,blender,addon)
+                    definition=custom.build_definition(files,inspections,label=label)
+                    result_queue.put(('ok',custom.import_and_save(definition,files,replace=replace)))
+                except custom.CustomTargetError as exc:
+                    result_queue.put(('error',str(exc)))
+                except Exception as exc:
+                    dragon_log.log_exception('Custom target failed',exc)
+                    result_queue.put(('error',str(exc)+nl+nl+LOG_HINT))
+            threading.Thread(target=work,daemon=True).start()
+            win.after(150,finish)
+        add_button.configure(command=add)
+
+    def remove_custom_target(self):
+        from um import dragon_custom_targets as custom
+        target_id=self.target_id.get()
+        if not target_id.startswith('custom_'):
+            return
+        if not messagebox.askokcancel('Remove custom target',f'Remove {target_id}? Its private GMD copies are deleted. '
+                                      'Mods you already generated and the game files are not affected.'):
+            return
+        try:
+            custom.delete_target(target_id)
+        except Exception as exc:
+            dragon_log.log_exception('Removing a custom target failed',exc)
+            messagebox.showerror('Custom target',str(exc));return
+        self.refresh_target_list()
+        self.target_id.set('yagami');self.select_target()
 
     def blender_usable(self):
         value=self.paths['blender'].get().strip()
@@ -605,7 +727,8 @@ class DragonWindow:
         if folder.exists():
             messagebox.showerror('Output folder', 'A private output with the same name exists. Wait a moment and retry.')
             return
-        use_variants=self.include_variants.get()
+        from um.dragon_targets import get_target as _target_of
+        use_variants=self.include_variants.get() and _target_of(target_id).custom_references is None
         profile_mode=self.profile_mode.get()
         if use_variants:
             from um.dragon_variants import availability

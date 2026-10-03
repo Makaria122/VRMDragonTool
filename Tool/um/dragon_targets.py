@@ -93,6 +93,11 @@ for _id, _label, _bones, _tops, _face, _hair in _TRIALS:
 _BUILTIN_IDS = tuple(_TARGETS)
 
 
+def builtin_ids() -> tuple[str, ...]:
+    """The characters built into the tool (Lost Judgment), without custom ones."""
+    return _BUILTIN_IDS
+
+
 def target_ids() -> tuple[str, ...]:
     from um import dragon_custom_targets as custom
     return _BUILTIN_IDS + tuple(i for i in custom.list_ids() if i not in _BUILTIN_IDS)

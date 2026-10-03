@@ -1,5 +1,12 @@
 # Changes
 
+## New GUI: any Dragon Engine game by default, dark theme, Japanese
+- Rebuilt window with a sidebar (Convert, Advanced tools, Setup, Storage & logs, Settings). "Any Dragon Engine game: find a character by name" is now the default; the built-in Lost Judgment characters are the second choice. The "Lost Judgment beta" wording is gone.
+- Convert page in three steps (character, avatar, options); reference files, paths and the JSON report are folded away. Long work (searching, Blender) runs in the background so the window stays responsive.
+- Settings: language (Automatic, English, Japanese) and theme (Follow Windows, Light, Dark), applied immediately and remembered. Conversion engine messages (Blender and check errors) stay in English.
+- Setup page: Blender download/choice and local AI in one place; Storage & logs page: outputs table with cleanup, log folder and debug report.
+- Crisper text on high-DPI screens. Tests: translation coverage (every GUI text has a Japanese entry with matching placeholders), theme contrast, and GUI start-up/language/theme/busy-state checks.
+
 ## Custom targets: whole characters at once
 - New "Whole character" tab in the custom-target dialog: choose a folder and type a character name; every GMD whose name contains it is found, inspected in Blender (read-only), and listed with tick boxes (base set always added; undressed, swimwear, dead, other-age, test and special-pose models, unreadable files, other skeletons and body models without feet are left out by default and explained). Registered as one custom target whose extra parts (other outfits, hair styles, faces) become variants: with the switch-target checkbox on, one conversion replaces every part of the character.
 - Faster batches: a variant exports only its own slot, parts with a different bone count use their own (per-slot bone counts), a few Blender jobs run in parallel ("Parallel Blender jobs", default 3, also used for the Lost Judgment variants), and for batches of more than six models the working .blend files, textures and review copies are deleted as each model finishes (a 40-part character: about 7 minutes and 160 MB instead of an estimated hours and 8 GB).

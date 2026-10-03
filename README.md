@@ -4,7 +4,7 @@ Lost Judgment向けVRM置換MODを生成する実験用ツールです。ゲー�
 
 **セットアップ・操作・制限事項は[Tool/README.md](Tool/README.md)を参照してください。**
 
-- Tool専用Ollama／QwenのセットアップUI。グローバルOllamaには接続しません。
+- AI不要の簡易モード（既定）と、Tool専用Ollama／Qwenを使う詳細モード。グローバルOllamaには接続しません。
 - 抽出済みフォルダから登録キャラクター・衣装の参照GMDを検索。
 - 骨格グループごとの調整と、モデルごとのstrict書出し・材質検証。
 - 動作Actionは任意。未提供なら動作検査未実施のレビュー候補として出力。

@@ -1,5 +1,17 @@
 # Changes
 
+## Profile modes: simple (rules) and detailed (local AI)
+- New AI-free "simple" profile mode, now the GUI default (last choice is saved). Mesh regions come from the inventory classification (ambiguous head accessories become tops); unmatched VRM weight groups follow the nearest matched ancestor bone. Same schema and the same validation as the AI profile; undecidable cases stop with a hint to use detailed mode instead of guessing.
+- "Detailed" mode keeps the managed local Ollama/Qwen path unchanged and never reuses a rule-based cached profile. Simple mode never starts or contacts the local AI; the AI setup is only required for detailed mode.
+- On the 13 earlier AI profiles (173 meshes) the AI never disagreed with the inventory regions except where the inventory had no answer; a real Kuwana run produced an identical profile in simple mode.
+- The inventory now records the VRM bone parents (`source_bone_parents`).
+
+## Pose-independent leg fit and sturdier variant batches
+- Leg proportion correction no longer fails for bent-leg targets (e.g. seated): when standing proportions do not apply, thigh/shin/foot/toe segments are rotated and scaled to the target's bone directions (move limit 1 m in this mode). Standing targets keep the previous height remap; unordered landmarks (bad floor, kneeling/lying) still stop for review.
+- A variant batch now skips a failing non-default variant, records it in `failed_variants` (status `VARIANT_PACK_PARTIAL`, warning file in the pack) and packs the rest. A failing default model still stops the batch.
+- New switch targets: Yagami `c07bd01`/`c07bd02`/`c07_chair`, Kuwana `army` and the approved young-era `30` (single GMD containing the face). Strict roundtrip passed; in-game behaviour (posture, expression, switching) is unverified.
+- "Include switch targets" is ON by default and remembered.
+
 ## Sawa special switch targets
 - Added explicitly approved age18/dead/sitting recipes for c_aw_sawa_18, c_aw_sawa_dead and c_aw_sawa_sit. Normal-only mode is unchanged; enable switch-target generation to include found references.
 - Four separate 182-bone single-GMD targets; no renamed copies, no Amasawa mixing. Actual current skeleton measurements still determine whether preparation can be shared.

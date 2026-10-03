@@ -10,7 +10,7 @@ import json
 import shutil
 from pathlib import Path
 
-# Reviewed layouts plus explicitly approved Sawa age/dead/sitting exceptions.
+# Reviewed layouts plus explicitly approved Sawa age/dead/sitting and Kuwana 30 exceptions.
 # Other discovered young/dead/special candidates remain excluded.
 # base, variant key, tops override, face override, hair override
 ROWS = (
@@ -26,6 +26,10 @@ ROWS = (
     ('yagami', 'repair', 'c_cl_x_yagami_repair', None, None),
     ('yagami', 'avatar_face', None, 'c_cl_f_yagami_avatar', None),
     ('yagami', 'ninja_face', None, 'c_cl_f_yagami_ninja', None),
+    # Cutscene tops (user-approved, incl. the chair posture model); same 358-bone rig.
+    ('yagami', 'c07bd01', 'c_cl_x_yagami_c07bd01', None, None),
+    ('yagami', 'c07bd02', 'c_cl_x_yagami_c07bd02', None, None),
+    ('yagami', 'c07_chair', 'c_cl_x_yagami_c07_chair', None, None),
     ('sugiura', 'boxing', 'c_cl_x_sugiura_dlc_bx', None, None),
     ('sugiura', 'taxi', 'c_cl_x_sugiura_taxi', None, None),
     ('sugiura', 'workman', 'c_cl_x_sugiura_workman', None, None),
@@ -37,10 +41,17 @@ ROWS = (
     # default preparation. The shared face keeps its independently exported owner.
     ('kuwana', 'event_c04', 'c_cm_x_kuwana_c04bd01', None, None),
     ('kuwana', 'event_c10', 'c_cm_x_kuwana_c10bd01', None, None),
+    ('kuwana', 'army', 'c_cm_x_kuwana_army', None, None),
+    # Approved young-era model: its tops GMD already contains the face, so it is a single-GMD layout.
+    ('kuwana', '30', 'c_cm_x_kuwana_30', None, None),
     ('sawa', 'age18', 'c_aw_sawa_18', None, None),
     ('sawa', 'dead', 'c_aw_sawa_dead', None, None),
     ('sawa', 'sitting', 'c_aw_sawa_sit', None, None),
 )
+
+
+# Variants whose tops GMD holds face (and hair) too: VRM tops/face/hair go into that one GMD.
+SINGLE_GMD_VARIANTS = frozenset({'kuwana__30'})
 
 
 def variant_target(key):
@@ -54,7 +65,10 @@ def variant_target(key):
     for role, stem in (('tops', tops), ('face', face), ('hair', hair)):
         if stem:
             refs[role] = f'Variants/{base}/{stem}.gmd'
-    if base == 'kaito' and face:
+    if key in SINGLE_GMD_VARIANTS:
+        refs['face'] = refs['hair'] = refs['tops']
+        slots = (ExportSlot('tops', 'tops', tops, ('tops', 'face', 'hair'), 'tops'),)
+    elif base == 'kaito' and face:
         refs['hair'] = refs['face']
         slots = (ExportSlot('tops', 'tops', tops, ('tops',), 'tops'),
                  ExportSlot('face', 'face', face, ('face', 'hair'), 'face'))
@@ -130,7 +144,7 @@ def availability(base, private_data=None, source_root=None):
 
 def run_batch(vrm, references, blender, addon, action_blend, baseline_report,
               output, dummy_texture_dir, progress=None, target_id='yagami', variant_ids=None,
-              source_root=None):
+              source_root=None, profile_mode='simple'):
     from um.dragon_oneclick import run
     from um.dragon_mod_package import combine_mod_folders
     from um.dragon_targets import target_references, get_target
@@ -162,6 +176,7 @@ def run_batch(vrm, references, blender, addon, action_blend, baseline_report,
                   sorted({Path(r[2]).stem for r in ROWS if r[0] == target_id and r[2]} -
                          {Path(get_target(k).reference_files['tops']).stem for k in keys if k != target_id}),
               'skipped_variants':[r for r in offered if not r['ready']],
+              'failed_variants': [],
               'unselected_variants':[r['id'] for r in offered if r['ready'] and r['id'] not in keys],
               'coverage_scope':'Registered source references; strict validated per export; not all runtime switches' if source_root is not None else 'Registered offline-validated references only; not all runtime switches'}
     def save():
@@ -180,9 +195,19 @@ def run_batch(vrm, references, blender, addon, action_blend, baseline_report,
                                              source_root=source_root)
                 if any(Path(refs[r]).resolve() != Path(declared[r]).resolve() for r in declared):
                     raise ValueError('Variant batch requires the registered default references')
-            result = run(vrm, refs, blender, addon, action_blend, baseline_report,
-                         output/'Runs'/key, dummy_texture_dir, progress, target_id=key,
-                         profile_root=(Path(__file__).resolve().parents[1]/'userdata/Profiles') if source_root is not None else bundle/'Profiles', preparation_cache=preparation_cache)
+            try:
+                result = run(vrm, refs, blender, addon, action_blend, baseline_report,
+                             output/'Runs'/key, dummy_texture_dir, progress, target_id=key,
+                             profile_root=(Path(__file__).resolve().parents[1]/'userdata/Profiles') if source_root is not None else bundle/'Profiles', preparation_cache=preparation_cache, profile_mode=profile_mode)
+            except Exception as exc:
+                # The default model is shared by every variant; any other failure only drops
+                # that variant (recorded, never silently) so the rest can still be packed.
+                if key == target_id:
+                    raise
+                report['failed_variants'].append({'id': key, 'error': str(exc)})
+                progress(f'切替候補 {key} は変換できませんでした（他は続行）: {exc}')
+                save()
+                continue
             mod = Path(result['mod_folder'])
             kept = output / 'OwnedPayloads' / key
             kept.mkdir(parents=True)
@@ -219,11 +244,14 @@ def run_batch(vrm, references, blender, addon, action_blend, baseline_report,
         report['motion_failed_variants'] = [r['id'] for r in report['variants'] if r['status'] == 'MOTION_CHECK_FAILED']
         report['motion_unchecked_variants']=[r['id'] for r in report['variants'] if r['motion_validation']=='MOTION_NOT_RUN']
         report['motion_quality_passed'] = all(r['motion_quality_passed'] for r in report['variants'])
-        report['status'] = ('VARIANT_PACK_MOTION_CHECK_FAILED' if report['motion_failed_variants'] else
+        report['status'] = ('VARIANT_PACK_PARTIAL' if report['failed_variants'] else
+                           'VARIANT_PACK_MOTION_CHECK_FAILED' if report['motion_failed_variants'] else
                            'VARIANT_PACK_MOTION_NOT_RUN' if report['motion_unchecked_variants'] else 'VARIANT_PACK_READY_UNVERIFIED')
         # Like single-run ReviewPack, failed motion outputs are review-only, not approved mods.
-        if report['motion_failed_variants'] or report['motion_unchecked_variants']:
-            warning = 'WARNING: motion checks FAILED for: '+', '.join(report['motion_failed_variants'])+'\nMotion NOT RUN for: '+', '.join(report['motion_unchecked_variants'])+'\nReview-only candidate. Do not treat as validated in-game.\n'
+        if report['failed_variants'] or report['motion_failed_variants'] or report['motion_unchecked_variants']:
+            warning = ''.join(f"WARNING: variant {f['id']} could NOT be converted and is not in this pack: {f['error']}\n"
+                              for f in report['failed_variants'])
+            warning += 'WARNING: motion checks FAILED for: '+', '.join(report['motion_failed_variants'])+'\nMotion NOT RUN for: '+', '.join(report['motion_unchecked_variants'])+'\nReview-only candidate. Do not treat as validated in-game.\n'
             folder = Path(report['mod_folder'])
             (folder/'VARIANT_REVIEW_WARNING.txt').write_text(warning, encoding='utf-8')
             with (folder/'MODLOG.md').open('a',encoding='utf-8') as log:

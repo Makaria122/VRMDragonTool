@@ -52,7 +52,7 @@ def create_avatar_profile(vrm: str | Path, references: dict[str,str | Path],
                           blender: str | Path, addon: str | Path,
                           profile_root: str | Path,
                           progress: Callable[[str],None] | None = None,
-                          target_id: str = 'yagami') -> dict:
+                          target_id: str = 'yagami', profile_mode: str = 'simple') -> dict:
     progress=progress or (lambda message:None)
     vrm=Path(vrm).expanduser().resolve(strict=True)
     references={role:Path(references[role]).expanduser().resolve(strict=True)
@@ -92,9 +92,10 @@ def create_avatar_profile(vrm: str | Path, references: dict[str,str | Path],
         inventory=json.loads(inventory_file.read_text(encoding='utf-8'))
         if any(row.get('unweighted_vertices',0) for row in inventory.get('meshes',[])):
             raise LocalProfileError('Unweighted VRM vertices prevent a safe reusable profile')
-        progress('ローカルOllamaでプロファイルを作成中…')
-        # Keep partial AI output out of the reusable profile directory.
-        profile=create_local(inventory,mapping['fit_plan'],work/'avatar-profile.json')
+        progress('ローカルOllamaでプロファイルを作成中…' if profile_mode=='detailed'
+                 else 'ルールでプロファイルを作成中（簡易モード）…')
+        # Keep partial output out of the reusable profile directory.
+        profile=create_local(inventory,mapping['fit_plan'],work/'avatar-profile.json',profile_mode)
     profile.update({'source_vrm':str(vrm),'source_vrm_sha256':_digest(vrm),
                     'source_references':fit_hashes,
                     'source_mesh_names':sorted(row['object'] for row in inventory['meshes']),
@@ -130,7 +131,7 @@ def create_avatar_profile(vrm: str | Path, references: dict[str,str | Path],
 
 def load_cached_profile(vrm: str | Path, references: dict[str,str | Path],
                         inventory: dict, fit_plan: dict, profile_root: str | Path,
-                        target_id: str = 'yagami') -> dict | None:
+                        target_id: str = 'yagami', require_ai: bool = False) -> dict | None:
     vrm=Path(vrm).expanduser().resolve(strict=True)
     folder=profile_directory(vrm,profile_root,target_id)
     candidates=sorted(folder.glob('avatar-profile_*.json'),key=lambda x:x.stat().st_mtime,reverse=True) if folder.is_dir() else []
@@ -139,6 +140,8 @@ def load_cached_profile(vrm: str | Path, references: dict[str,str | Path],
     for path in candidates:
         try:
             profile=json.loads(path.read_text(encoding='utf-8'))
+            if require_ai and profile.get('profile_method')=='deterministic':
+                continue  # detailed mode must not silently reuse a rule-based profile
             if (profile.get('target_id', 'yagami')!=target_id
                     or profile.get('source_vrm_sha256')!=source_hash
                     or profile.get('source_references')!=hashes

@@ -22,11 +22,32 @@ class VariantTests(unittest.TestCase):
         self.assertEqual(t.slots[1].source_regions,('face','hair'))
         with self.assertRaises(ValueError):get_target('kaito__boy')
         self.assertEqual(variants_for('sawa'),['sawa','sawa__age18','sawa__dead','sawa__sitting'])
-        self.assertEqual(variants_for('kuwana'),['kuwana','kuwana__event_c04','kuwana__event_c10'])
+        self.assertEqual(variants_for('kuwana'),['kuwana','kuwana__event_c04','kuwana__event_c10','kuwana__army','kuwana__30'])
         owned=replacement_ownership(variants_for('kuwana'))
-        self.assertEqual(len(owned),4)
+        self.assertEqual(len(owned),6)
+        self.assertEqual(owned['chara/tops/c_cm_x_kuwana_army/c_cm_x_kuwana_army.gmd']['owner'],'kuwana__army')
         self.assertEqual(owned['chara/face/c_cm_f_kuwana/c_cm_f_kuwana.gmd']['owner'],'kuwana')
         self.assertEqual(get_target('kuwana__event_c10').slots[0].stem,'c_cm_x_kuwana_c10bd01')
+
+    def test_yagami_cutscene_tops_have_distinct_owned_gmds(self):
+        owners=replacement_ownership(variants_for('yagami'))
+        for name in ('c07bd01','c07bd02','c07_chair'):
+            stem='c_cl_x_yagami_'+name
+            target=get_target('yagami__'+name)
+            self.assertEqual(target.bone_count,358)
+            self.assertEqual(target.slots[0].stem,stem)
+            self.assertEqual(owners[f'chara/tops/{stem}/{stem}.gmd']['owner'],'yagami__'+name)
+
+    def test_kuwana_30_is_single_gmd_with_face_inside_and_leaves_shared_face_alone(self):
+        t=get_target('kuwana__30')
+        self.assertEqual(t.bone_count,285)
+        self.assertEqual(len(t.slots),1)
+        self.assertEqual(t.slots[0].stem,'c_cm_x_kuwana_30')
+        self.assertEqual(t.slots[0].source_regions,('tops','face','hair'))
+        self.assertEqual(len(set(t.reference_files.values())),1)
+        owners=replacement_ownership(variants_for('kuwana'))
+        self.assertEqual(owners['chara/face/c_cm_f_kuwana/c_cm_f_kuwana.gmd']['owner'],'kuwana')
+        self.assertEqual(owners['chara/tops/c_cm_x_kuwana_30/c_cm_x_kuwana_30.gmd']['owner'],'kuwana__30')
 
     def test_sawa_special_layouts_have_distinct_owned_gmds(self):
         keys=variants_for('sawa');owners=replacement_ownership(keys)
@@ -62,7 +83,7 @@ class VariantTests(unittest.TestCase):
     def test_batch_combines_owned_paths_only_and_reports_partial_motion(self):
         bundle=Path(__file__).resolve().parents[2]
         keys=['kaito','kaito__cutscene','kaito__suit']
-        def fake_run(vrm,refs,blender,addon,action,baseline,out,dummy,progress,target_id,profile_root,preparation_cache):
+        def fake_run(vrm,refs,blender,addon,action,baseline,out,dummy,progress,target_id,profile_root,preparation_cache,**_):
             mod=Path(out)/'ReviewPack/Mods/fake';mod.mkdir(parents=True)
             (mod/'mod-meta.yaml').write_text('name: Test\n',encoding='utf-8')
             t=get_target(target_id)
@@ -102,6 +123,27 @@ class VariantTests(unittest.TestCase):
             self.assertTrue(next(r for r in availability('kaito',private) if r['id']==key)['ready'])
             p=private/get_target(key).reference_files['tops'];p.write_bytes(b'changed')
             self.assertFalse(next(r for r in availability('kaito',private) if r['id']==key)['ready'])
+
+    def test_failed_variant_is_skipped_and_recorded_but_rest_is_packed(self):
+        bundle=Path(__file__).resolve().parents[2]
+        keys=['kaito','kaito__cutscene','kaito__suit']
+        def fake_run(vrm,refs,blender,addon,action,baseline,out,dummy,progress,target_id,profile_root,preparation_cache,**_):
+            if target_id=='kaito__cutscene':raise ValueError('Leg proportion correction outside supported bounds')
+            mod=Path(out)/'ReviewPack/Mods/fake';mod.mkdir(parents=True)
+            (mod/'mod-meta.yaml').write_text('name: Test\n',encoding='utf-8')
+            for slot in get_target(target_id).slots:
+                p=mod/'chara'/slot.region/slot.stem/(slot.stem+'.gmd')
+                p.parent.mkdir(parents=True,exist_ok=True);p.write_bytes(target_id.encode())
+            return {'mod_folder':str(mod),'candidate_status':'MOTION_NOT_RUN'}
+        with tempfile.TemporaryDirectory() as temp:
+            out=Path(temp)/'batch'
+            with patch('um.dragon_variants.availability',return_value=[{'id':k,'ready':True} for k in keys]),patch('um.dragon_oneclick.run',side_effect=fake_run):
+                result=run_batch('vrm',target_references('kaito',bundle/'PrivateData'),'b','a','act','baseline',out,'dummy',target_id='kaito')
+            self.assertEqual(result['status'],'VARIANT_PACK_PARTIAL')
+            self.assertEqual([f['id'] for f in result['failed_variants']],['kaito__cutscene'])
+            self.assertEqual([v['id'] for v in result['variants']],['kaito','kaito__suit'])
+            self.assertIn('could NOT be converted',(Path(result['mod_folder'])/'VARIANT_REVIEW_WARNING.txt').read_text())
+            self.assertEqual(json.loads((out/'variant-coverage.json').read_text())['status'],'VARIANT_PACK_PARTIAL')
 
     def test_failure_does_not_publish_combined_pack(self):
         with tempfile.TemporaryDirectory() as temp:

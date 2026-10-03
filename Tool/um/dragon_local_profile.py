@@ -10,6 +10,10 @@ import os
 from pathlib import Path
 
 MODEL = os.environ.get('UM_DRAGON_LOCAL_MODEL', 'qwen2.5-coder:7b')
+DETERMINISTIC_METHOD = 'deterministic'
+DETERMINISTIC_RULES = 'deterministic-rules-v1'
+PROFILE_MODES = ('simple', 'detailed')  # simple: rules only; detailed: managed local AI
+SIMPLE_MODE_HINT = '簡易モードでは判断できません。詳細モード（ローカルAI）を試してください'
 
 
 class LocalProfileError(ValueError):
@@ -95,7 +99,67 @@ def _validate(data: dict, inventory: dict, fit_plan: dict) -> dict:
             'game_install_changed':False}
 
 
-def create(inventory: dict, fit_plan: dict, output: str | Path) -> dict:
+def _nearest_matched_target(group: str, parents: dict, targets_by_source: dict) -> str | None:
+    seen = set()
+    bone = parents.get(group)
+    while bone is not None and bone not in seen:
+        if bone in targets_by_source:
+            return targets_by_source[bone]
+        seen.add(bone)
+        bone = parents.get(bone)
+    return None
+
+
+def create_deterministic(inventory: dict, fit_plan: dict, output: str | Path) -> dict:
+    """Rule-based profile (no AI): same schema and the same validation as the AI profile.
+
+    Regions come from the inventory's own classification (ambiguous head accessories become
+    tops); an unmatched weight group follows its nearest matched ancestor bone. Anything the
+    rules cannot decide stops with a hint to use the detailed (local AI) mode.
+    """
+    output=Path(output).expanduser().resolve()
+    if output.exists():
+        raise LocalProfileError('Per-VRM profile output already exists')
+    rows=inventory.get('meshes',[])
+    if not isinstance(inventory.get('ground_alignment'),dict):
+        raise LocalProfileError('Run spatial inventory with target floor measurements first')
+    regions={row['object']:(row.get('region') or 'tops') for row in rows}
+    matched=fit_plan.get('matched_roles',[])
+    targets_by_source={row['source_bone']:row['target_bone'] for row in matched}
+    hinted={row['source_group'] for row in fit_plan.get('accessory_parent_hints',[])}
+    unknown=sorted(set(inventory.get('unknown_weight_groups',[]))-set(targets_by_source)-hinted)
+    parents=inventory.get('source_bone_parents') or {}
+    hints=[];unresolved=[]
+    for group in unknown:
+        target=_nearest_matched_target(group,parents,targets_by_source)
+        if target is None:unresolved.append(group)
+        else:hints.append({'source_group':group,'suggested_target':target})
+    if unresolved:
+        raise LocalProfileError('VRMの骨 '+', '.join(unresolved[:6])+(' …' if len(unresolved)>6 else '')
+                                +' の割り当て先を骨の親子から決められません。'+SIMPLE_MODE_HINT)
+    ground=inventory['ground_alignment']
+    correction=ground.get('measured_correction_m')
+    if type(correction) not in (int,float):
+        raise LocalProfileError('VRM/target floor measurements are missing')
+    proposed={'mesh_regions':regions,'accessory_parent_hints':hints,
+              'ground_action':'raise' if correction>.005 else 'lower' if correction<-.005 else 'keep',
+              'foot_fit_targets':sorted(row['target_bone'] for row in inventory.get('foot_alignment',[])
+                                        if .04<float(row.get('distance_m',0))<=.25)}
+    result=_validate(proposed,inventory,fit_plan)
+    result['model']=DETERMINISTIC_RULES
+    result['profile_method']=DETERMINISTIC_METHOD
+    return _finish(result,rows,inventory,output,require_candidates=True)
+
+
+def create(inventory: dict, fit_plan: dict, output: str | Path, mode: str = 'detailed') -> dict:
+    if mode not in PROFILE_MODES:
+        raise LocalProfileError(f'Unknown profile mode: {mode}')
+    if mode == 'simple':
+        return create_deterministic(inventory,fit_plan,output)
+    return _create_with_ai(inventory,fit_plan,output)
+
+
+def _create_with_ai(inventory: dict, fit_plan: dict, output: str | Path) -> dict:
     output=Path(output).expanduser().resolve()
     if output.exists():
         raise LocalProfileError('Per-VRM profile output already exists')
@@ -160,12 +224,18 @@ def create(inventory: dict, fit_plan: dict, output: str | Path) -> dict:
         result=_validate(proposed,inventory,fit_plan)
     except (KeyError,TypeError,json.JSONDecodeError) as exc:
         raise LocalProfileError(f'Local Ollama returned invalid profile JSON: {exc}') from exc
+    return _finish(result,rows,inventory,output)
+
+
+def _finish(result: dict, rows: list[dict], inventory: dict, output: Path,
+            require_candidates: bool = False) -> dict:
     missing={'tops','face','hair'}-set(result['mesh_regions'].values())
     adjustments=[]
     for region in sorted(missing):
         candidates=[row for row in rows if row.get('region')==region]
         if not candidates:
-            raise LocalProfileError(f'VRM inventory has no mesh candidate for required region: {region}')
+            raise LocalProfileError(f'VRM inventory has no mesh candidate for required region: {region}'
+                                    +(' ('+SIMPLE_MODE_HINT+')' if require_candidates else ''))
         priority={'body mesh entirely above neck':0,'eye/face name':1,'face name':1,
                   'head/hair name':0,'hair material near head':1,'body/outfit below head':2}
         selected=min(candidates,key=lambda row:priority.get(row.get('reason',''),3))

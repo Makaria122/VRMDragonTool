@@ -107,6 +107,7 @@ def run(mapping):
     return {'schema_version':1,'source_rig':rig.name,'neck_z_m':neck_z,'meshes':rows,
             'ground_alignment':ground_alignment,'foot_alignment':foot_alignment,
             'joint_anchors':joint_anchors,
+            'source_bone_parents':{b.name:(b.parent.name if b.parent else None) for b in rig.data.bones},
             'mesh_count':len(rows),'ambiguous_meshes':[row['object'] for row in rows if row['region'] is None],
             'unknown_weight_groups':sorted({name for row in rows for name in row['unknown_weight_groups']}),
             'full_avatar_converted':False,'requires_region_review':True,'game_install_changed':False}

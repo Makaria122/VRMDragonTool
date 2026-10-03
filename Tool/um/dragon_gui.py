@@ -37,11 +37,17 @@ class DragonWindow:
         self.source_root = tk.StringVar()
         self.action_blend = tk.StringVar()
         self.settings_file = self.user_data / 'settings.json'
+        saved_include_variants = True  # default ON; the last choice is restored from settings.json
+        saved_profile_mode = 'simple'
         if self.settings_file.is_file():
             try:
                 settings=json.loads(self.settings_file.read_text(encoding='utf-8'))
                 self.source_root.set(settings.get('source_root',''))
                 self.paths['blender'].set(settings.get('blender',self.paths['blender'].get()))
+                if isinstance(settings.get('include_variants'),bool):
+                    saved_include_variants = settings['include_variants']
+                if settings.get('profile_mode') in ('simple','detailed'):
+                    saved_profile_mode = settings['profile_mode']
             except (OSError,ValueError):
                 pass
         self.messages: queue.Queue = queue.Queue()
@@ -72,8 +78,17 @@ class DragonWindow:
         ttk.Label(action_row,text='動作検査Action（任意）',width=23).pack(side='left')
         ttk.Entry(action_row,textvariable=self.action_blend).pack(side='left',fill='x',expand=True,padx=4)
         ttk.Button(action_row,text='参照…',command=self.choose_action).pack(side='left')
+        mode_row=ttk.Frame(frame);mode_row.pack(fill='x',pady=(0,3))
+        self.profile_mode=tk.StringVar(value=saved_profile_mode)
+        self.profile_mode.trace_add('write',lambda *_:self.save_settings())
+        ttk.Label(mode_row,text='プロファイル作成',width=23).pack(side='left')
+        ttk.Radiobutton(mode_row,text='簡易（AI不要・ルール判定）',value='simple',
+                        variable=self.profile_mode).pack(side='left')
+        ttk.Radiobutton(mode_row,text='詳細（ローカルAI・要セットアップ）',value='detailed',
+                        variable=self.profile_mode).pack(side='left',padx=8)
         variant_row=ttk.Frame(frame);variant_row.pack(fill='x',pady=(0,6))
-        self.include_variants=tk.BooleanVar(value=False)
+        self.include_variants=tk.BooleanVar(value=saved_include_variants)
+        self.include_variants.trace_add('write',lambda *_:self.save_settings())
         ttk.Checkbutton(variant_row,text='参照が見つかった切替先も個別検証・生成（ゲーム内未確認）',
                         variable=self.include_variants).pack(side='left')
         ttk.Button(variant_row,text='対象と除外理由',command=self.show_variants).pack(side='left',padx=6)
@@ -131,7 +146,7 @@ class DragonWindow:
         scroll.pack(side="right", fill="y")
         self.profile_tab=ttk.Frame(self.notebook,padding=14)
         self.notebook.add(self.profile_tab,text='VRMプロファイル作成')
-        ttk.Label(self.profile_tab,text='ローカルAIでVRM別プロフィールを作成・保存',
+        ttk.Label(self.profile_tab,text='VRM別プロフィールを作成・保存（簡易／詳細は変換タブのモード設定に従います）',
                   font=('Segoe UI',14,'bold')).pack(anchor='w',pady=(0,6))
         ttk.Label(self.profile_tab,text='メッシュ領域・補助骨の対応案と接地差を記録します。既存プロフィールは一括作成時に再利用します。',
                   wraplength=700).pack(anchor='w',pady=(0,10))
@@ -146,13 +161,13 @@ class DragonWindow:
             ttk.Label(row,text=label,width=23).pack(side='left')
             ttk.Entry(row,textvariable=self.paths[name]).pack(side='left',fill='x',expand=True,padx=4)
             ttk.Button(row,text='参照…',command=lambda key=name,desc=kind:self.browse(key,desc)).pack(side='left')
-        self.profile_button=ttk.Button(self.profile_tab,text='ローカルAIでプロフィールを作成',command=self.start_profile)
+        self.profile_button=ttk.Button(self.profile_tab,text='プロフィールを作成',command=self.start_profile)
         self.profile_button.pack(fill='x',pady=(12,5))
-        self.profile_status=tk.StringVar(value='AIセットアップタブから専用OllamaとQwenを導入してください。')
+        self.profile_status=tk.StringVar(value='簡易モードはAI不要です。詳細モードを使う場合はAIセットアップタブで専用OllamaとQwenを導入してください。')
         ttk.Label(self.profile_tab,textvariable=self.profile_status,wraplength=700).pack(anchor='w')
         ai_tab=ttk.Frame(self.notebook,padding=14);self.notebook.add(ai_tab,text='AIセットアップ')
         ttk.Label(ai_tab,text='Tool専用ローカルAI',font=('Segoe UI',14,'bold')).pack(anchor='w')
-        ttk.Label(ai_tab,text='Ollama本体・モデル・キャッシュはTool/runtime内に保存します。\n既存のOllamaには接続しません。Qwenは約5GB、本体は約1.5GBのダウンロードです。\nPython 3.10+（Tkinter/Pillow付き）とBlenderは別途必要です。',wraplength=700).pack(anchor='w',pady=10)
+        ttk.Label(ai_tab,text='詳細モード（ローカルAI）を使う場合のみ必要です。簡易モードでは不要です。\nOllama本体・モデル・キャッシュはTool/runtime内に保存します。\n既存のOllamaには接続しません。Qwenは約5GB、本体は約1.5GBのダウンロードです。\nPython 3.10+（Tkinter/Pillow付き）とBlenderは別途必要です。',wraplength=700).pack(anchor='w',pady=10)
         self.ai_status=tk.StringVar(value='未確認');ttk.Label(ai_tab,textvariable=self.ai_status,wraplength=700).pack(anchor='w')
         self.ai_buttons=[]
         for label,operation in [('Ollamaをセットアップ','setup'),('Qwenをダウンロード','download'),('状態確認','status')]:
@@ -202,11 +217,14 @@ class DragonWindow:
 
     def save_settings(self):
         self.user_data.mkdir(parents=True,exist_ok=True)
-        data={'source_root':self.source_root.get().strip(),'blender':self.paths['blender'].get().strip()}
+        data={'source_root':self.source_root.get().strip(),'blender':self.paths['blender'].get().strip(),
+              'include_variants':self.include_variants.get(),'profile_mode':self.profile_mode.get()}
         temp=self.settings_file.with_suffix('.tmp')
         temp.write_text(json.dumps(data,ensure_ascii=False,indent=2),encoding='utf-8');temp.replace(self.settings_file)
 
     def require_ai(self):
+        if self.profile_mode.get()!='detailed':
+            return True  # simple mode is rule-based and never touches the local AI
         from um.dragon_local_ai import get_runtime
         info=get_runtime().status()
         if not info['installed'] or not info['model_available']:
@@ -267,15 +285,17 @@ class DragonWindow:
         self.profile_running=True
         self.profile_button.configure(state='disabled')
         self.oneclick_button.configure(state='disabled')
-        self.profile_status.set('点検・ローカルAIプロフィール作成中…')
+        self.profile_status.set('点検・ローカルAIプロフィール作成中…' if self.profile_mode.get()=='detailed'
+                                else '点検・ルールによるプロフィール作成中（簡易モード）…')
         refs={role:values[role] for role in ('tops','face','hair')}
         target_id=self.target_id.get()
+        profile_mode=self.profile_mode.get()
         def worker():
             try:
                 from um.dragon_profile_workflow import create_avatar_profile
                 result=create_avatar_profile(values['vrm'],refs,values['blender'],values['addon'],
                     profile_root,progress=lambda text:self.messages.put(('progress',text)),
-                    target_id=target_id)
+                    target_id=target_id,profile_mode=profile_mode)
                 self.messages.put(('ok',result))
             except Exception as exc:
                 self.messages.put(('error',str(exc)))
@@ -301,6 +321,7 @@ class DragonWindow:
             messagebox.showerror('保存先', '同名の私用出力があります。少し待って再試行してください。')
             return
         use_variants=self.include_variants.get()
+        profile_mode=self.profile_mode.get()
         if use_variants:
             from um.dragon_variants import availability
             if not self.source_root.get().strip():
@@ -328,7 +349,8 @@ class DragonWindow:
                 report=run(values['vrm'],{role:values[role] for role in ('tops','face','hair')},
                            values['blender'],values['addon'],action,baseline,folder,dummy_dir,
                            progress=lambda text:self.messages.put(('progress',text)),
-                           target_id=target_id,**({'source_root':source_root} if use_variants else {}))
+                           target_id=target_id,profile_mode=profile_mode,
+                           **({'source_root':source_root} if use_variants else {}))
                 self.messages.put(('ok',report))
             except Exception as exc:
                 self.messages.put(('error',str(exc)))
@@ -561,7 +583,9 @@ class DragonWindow:
                     messagebox.showwarning('出力フォルダ',f'出力は完了しましたがフォルダを開けませんでした: {exc}\n{folder}')
         if result.get('avatar_profile_path'):
             self.profile_status.set(f"保存しました: {result['avatar_profile_path']}")
-        self.status.set('補助骨などの形状検査が不合格です。動作検査も未実施のレビュー候補です。'
+        self.status.set('一部の切替候補は変換できませんでした（variant-coverage.jsonのfailed_variants参照）。残りはレビュー候補として出力しました。'
+                        if result.get('status')=='VARIANT_PACK_PARTIAL' else
+                        '補助骨などの形状検査が不合格です。動作検査も未実施のレビュー候補です。'
                         if result.get('candidate_status')=='GEOMETRY_CHECK_FAILED' else
                         '動作検査は未実施です。ゲーム内確認が必要なレビュー候補を出力しました。'
                         if result.get('candidate_status')=='MOTION_NOT_RUN' or result.get('status')=='VARIANT_PACK_MOTION_NOT_RUN' else

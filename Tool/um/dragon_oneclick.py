@@ -49,7 +49,7 @@ def run(vrm: str | Path, references: dict[str,str | Path], blender: str | Path,
         output: str | Path, dummy_texture_dir: str | Path | None,
         progress: Callable[[str],None] | None = None,
         target_id: str = 'yagami', profile_root: str | Path | None = None,
-        preparation_cache: dict | None = None) -> dict:
+        preparation_cache: dict | None = None, profile_mode: str = 'simple') -> dict:
     progress=progress or (lambda value: None)
     vrm=Path(vrm).expanduser().resolve(strict=True)
     blender=Path(blender).expanduser().resolve(strict=True)
@@ -170,13 +170,15 @@ def run(vrm: str | Path, references: dict[str,str | Path], blender: str | Path,
             from um.dragon_skeleton_cache import reuse_profile
             avatar_profile=reuse_profile(shared['profile'],items,checked['fit_plan'])
         else:
-            avatar_profile=load_cached_profile(vrm,refs,items,checked['fit_plan'],profile_root,target_id)
+            avatar_profile=load_cached_profile(vrm,refs,items,checked['fit_plan'],profile_root,target_id,
+                                               require_ai=profile_mode=='detailed')
         if avatar_profile:
             progress('既存の同一VRMプロフィールを再利用中…')
         else:
-            progress('ローカルOllamaでこのVRM専用プロファイルを作成中…')
+            progress('ローカルOllamaでこのVRM専用プロファイルを作成中…' if profile_mode=='detailed'
+                     else 'ルールでこのVRM専用プロファイルを作成中（簡易モード）…')
             from um.dragon_local_profile import create as create_local_profile
-            avatar_profile=create_local_profile(items,checked['fit_plan'],output/'avatar-profile.json')
+            avatar_profile=create_local_profile(items,checked['fit_plan'],output/'avatar-profile.json',profile_mode)
             avatar_profile['target_id']=target_id
             avatar_profile['source_vrm']=str(vrm)
             avatar_profile['source_vrm_sha256']=_digest(vrm)
@@ -196,7 +198,7 @@ def run(vrm: str | Path, references: dict[str,str | Path], blender: str | Path,
         mapping['accessory_parent_hints']=list(checked['fit_plan']['accessory_parent_hints'])+avatar_profile['accessory_parent_hints']
         for row in items['meshes']:
             row['region']=avatar_profile['mesh_regions'][row['object']]
-            row['reason']=f'LOCAL_AI_PROFILE: {row["region"]}; {row.get("reason","")}'
+            row['reason']=f'{"LOCAL_AI_PROFILE" if avatar_profile.get("profile_method")!="deterministic" else "RULE_PROFILE"}: {row["region"]}; {row.get("reason","")}'
         inventory.write_text(json.dumps(items,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
         if any(not any(row['region']==role for row in items['meshes']) for role in REGIONS):
             raise OneClickError('ローカルAIプロファイルに顔・髪・胴体すべての領域がありません')

@@ -5,23 +5,67 @@
 
 Generates review-only replacement mod candidates from a VRM, using GMD files that **you extracted yourself from a game you own**. No game assets, VRMs, motion Actions or AI models are distributed. The tool never extracts game data and never installs anything into the game.
 
-## First-time setup (Windows)
+## Requirements
 
-1. Prepare Python 3.10+ (with Tkinter) and Blender 4.5.x. Python/Tkinter must currently be installed separately. Blender can be selected in the GUI, or placed at `Tool/runtime/blender/blender.exe`.
-2. Pillow is required. Example that does not touch your global environment: `python -m pip install --target Tool/runtime/python-packages -r Tool/requirements.txt`.
-3. Start the tool with `Start-Tool.cmd`.
+| What | Details |
+|---|---|
+| OS | **Windows 10/11** (developed and tested on Windows 11; the launcher, the Ollama download and some GUI buttons are Windows-only) |
+| Python | **3.10 or newer, with Tkinter** (tested with 3.10). With the python.org installer keep "tcl/tk and IDLE" ticked. |
+| Pillow | 10 to 12 (`Tool/requirements.txt`) |
+| Blender | **4.5 LTS** (tested with 4.5.14). The portable ZIP is enough; it is not bundled. |
+| GMD add-on | Bundled in `Tool/vendor/yakuza-gmd-gmt-blender` (GPL, separate license). Nothing to install in Blender. |
+| Your game data | A **Chara folder you extracted yourself** from your own copy of Lost Judgment. This project does not explain or provide extraction. The game does not have to be running or even installed to convert; it is only needed to try the result. |
+| A VRM | A humanoid VRM you are allowed to use. It is read through Blender's glTF importer. |
+| Disk space | Blender is about 1 GB. Each converted model keeps about 0.2 GB of working files in `Tool/userdata/outputs` (a full switch-target batch can reach several GB; clean up in the "Storage" tab). The detailed mode (local AI) adds about 1.8 GB for Ollama and about 4.4 GB for the model. |
+| Memory | Not measured. Large avatars need several GB of RAM in Blender. The detailed mode loads a 7B model (about 5 GB), so keep roughly that much RAM/VRAM free. |
+| Internet | Only for the explicit AI downloads of the detailed mode. Conversion itself works offline. |
 
-### Profile modes
+## Installation
+
+1. **Get the tool.** Either `git clone https://github.com/Makaria122/VRMDragonTool.git` or use "Code → Download ZIP" on GitHub and extract it. Put it in a normal folder (for example `D:/Tools/VRMDragonTool`), not inside the game folder or a mod manager's folder.
+2. **Install Python 3.10+** from python.org. Tick "Add python.exe to PATH" and keep "tcl/tk and IDLE". Check it with `python -c "import tkinter"` in a terminal; if that prints an error, Tkinter is missing.
+3. **Install Pillow** without touching your global Python: open a terminal in the tool folder and run `python -m pip install --target Tool/runtime/python-packages -r Tool/requirements.txt` (a plain `python -m pip install -r Tool/requirements.txt` also works).
+4. **Get Blender 4.5 LTS** from blender.org (portable ZIP) and extract it. Put the extracted folder's contents so that the executable is at `Blender/blender.exe` next to `Start-Tool.cmd` (or at `Tool/runtime/blender/blender.exe`). The tool finds it automatically there. If it lives elsewhere, pick `blender.exe` in the GUI once; the choice is remembered.
+5. **Start the tool** by double-clicking `Start-Tool.cmd` (or run `python Tool/launch.py`). If it says Python 3.10+ with Tkinter was not found, repeat step 2.
+6. **Optional, detailed mode only:** see "Setup for the detailed mode" below. The default simple mode needs no AI.
+
+## Quick start
+
+1. Start the tool (`Start-Tool.cmd`). You are on the "One-click mod" tab.
+2. **Extracted Chara folder → "Browse / search...":** choose the Chara folder you extracted from the game. The tool searches it recursively for the registered GMD files.
+3. **Target character:** pick the character whose model you want to replace. The tops/face/hair reference fields fill in by themselves. If the status line says references are missing, the folder does not contain that character's files.
+4. **VRM (required) → "Browse...":** choose your VRM.
+5. Check that the **Blender executable** and **GMD add-on folder** fields are filled (they are if you followed the installation).
+6. Leave **Profile creation** on "Simple" unless you want the local AI. Leave the switch-target checkbox on to also convert the character's other outfits and cutscene models, or turn it off to convert only the base model (faster, less disk space).
+7. Press **"Create mod pack from VRM automatically (beta, no game install)"**. Progress appears in the status line at the bottom; expect a few minutes per model. Do not close the window while it runs.
+8. When it finishes, Windows Explorer opens the finished mod folder: the one that contains `mod-meta.yaml` and `chara/`. It lives in a `ReviewPack/Mods/` folder under `Tool/userdata/outputs/VRM_<character>_<vrm name>_<date>/`. `MODLOG.md` inside it lists what was checked, and `VARIANT_REVIEW_WARNING.txt` appears when checks failed or were not run.
+
+### Using the result
+
+The tool never installs anything. The generated folder uses the Mods format (with `mod-meta.yaml`) that mod managers such as Shin Ryu Mod Manager read; this has not been verified by the project's tests. To try it, back up your game and mod setup, copy the generated mod folder into your mod manager's Mods folder yourself, enable it, and start the game. Enable only one mod per character and replacement target, because two mods that replace the same file conflict. Whether it looks right in the game is unverified; see the warning at the top.
+
+### Troubleshooting
+
+| Problem | What to do |
+|---|---|
+| `Start-Tool.cmd` says Python 3.10+ with Tkinter was not found | Install Python from python.org with "tcl/tk and IDLE", and make sure `python` is on PATH. |
+| "Missing/duplicate references" in the status line | The selected Chara folder does not contain that character's registered GMD files, or two files with the same name differ. Pick the right folder or another character. |
+| Blender or add-on field is empty | Put Blender at `Blender/blender.exe` (see Installation) or browse to it. The add-on folder is `Tool/vendor/yakuza-gmd-gmt-blender`. |
+| A conversion stops with an error | Read the message, then open the "Logs" tab, press "Create debug report" and attach the file when you report it (see "Reporting a problem"). |
+| The disk fills up | Open the "Storage" tab and delete old output folders, or only their working `.blend` files. |
+| It works but the result looks wrong in the game | Expected for now: see the warning at the top. Report it with the avatar's name and the character you replaced. |
+
+## Profile modes
 
 Choose the mode under "Profile creation" on the "One-click mod" tab. Your last choice is saved.
 
 - **Simple (default, no AI):** mesh regions (tops/face/hair) come from the rule-based classification of the inspection step; head accessories the rules cannot classify become tops. A weight group that exists only in the VRM is assigned to the nearest matched ancestor bone in the VRM's bone hierarchy. The "detailed mode" setup below is not needed. If the rules cannot decide (a region is missing, or a bone has no matched ancestor) the tool stops and says why. The result goes through the same validation as the detailed mode.
 - **Detailed (local AI):** the previous behaviour. A tool-owned Ollama/Qwen proposes the classification and bone mapping, and the result goes through the same validation. Set it up as follows.
 
-Setup for the detailed mode only:
+## Setup for the detailed mode (local AI, optional)
 
-4. Open the "AI setup" tab → "Set up Ollama" and confirm. The official Windows portable release is verified with SHA-256 and placed in `Tool/runtime/ollama`. It needs roughly 1.5 GB of download plus extraction/temporary space.
-5. Press "Download Qwen". `qwen2.5-coder:7b` is about 5 GB, so make sure you have enough disk space and RAM/VRAM. Models are stored in `Tool/runtime/models`.
+1. Open the "AI setup" tab → "Set up Ollama" and confirm. The official Windows portable release is verified with SHA-256 and placed in `Tool/runtime/ollama`. It needs roughly 1.5 GB of download plus extraction/temporary space.
+2. Press "Download Qwen". `qwen2.5-coder:7b` is about 5 GB, so make sure you have enough disk space and RAM/VRAM. Models are stored in `Tool/runtime/models`.
 
 Downloads only happen on these explicit actions. Conversion never downloads Ollama or a model by itself, and the tool never connects to an existing global Ollama.
 

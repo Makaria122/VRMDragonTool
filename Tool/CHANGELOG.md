@@ -1,5 +1,9 @@
 # Changes
 
+## Optional Blender download
+- When no Blender is found at start-up, the tool asks whether to download the pinned official portable Blender 4.5.14 (about 400 MB) from `download.blender.org`; new "Blender" tab with progress, cancel and "choose my own blender.exe". Nothing is downloaded without a confirmation.
+- The archive must match the reviewed size and SHA-256, the host must be `download.blender.org` over HTTPS (redirects elsewhere are refused), the zip is unpacked into a staging folder with strict path/symlink/size checks, moved into `Tool/runtime/blender` in one step and started once (`--version`) to confirm it is the expected Blender; any failure or cancel leaves nothing behind, and an existing non-empty `Tool/runtime/blender` is never overwritten. A stale saved Blender path no longer hides an auto-detected one.
+
 ## Log files and debug report
 - The tool now writes a log to `Tool/userdata/logs/vrmdragon.log` (rotating, about 12 MB at most): environment information at start-up, progress messages, error tracebacks, uncaught GUI errors, and for every Blender step the command line plus its exit code; when a step fails the full Blender output (clipped to 100 KB) is kept, where the error dialog only shows the tail. User names and home-folder paths are masked as lines are written. Logging never raises into the application.
 - New "Logs" tab: "Create debug report" writes a redacted text file (environment, tool fingerprint, recent failed runs, newest log) to share in a bug report; "Open logs folder"; "Delete all logs". Error dialogs point to it. Logs stay on the machine and are never uploaded.

@@ -11,6 +11,6 @@ The original code and documents of this project are provided under the MIT Licen
 - **Qwen2.5-Coder-7B-Instruct**: https://huggingface.co/Qwen/Qwen2.5-Coder-7B-Instruct (Apache-2.0). Ollama's `qwen2.5-coder:7b` is downloaded only by an explicit action. Check the model's distributor, model card and terms of use. The model itself is not included in the GitHub repository.
 - **Pillow**: https://python-pillow.org/ (HPND and others; see the LICENSE of the distribution). Installed separately as a dependency.
 - **Python / Tkinter**: https://www.python.org/ . See each distributor for the Python and Tcl/Tk licenses. The interpreter is not bundled in the current source distribution.
-- **Blender**: https://www.blender.org/ (GPL). Supplied separately by the user and not bundled in the current source distribution.
+- **Blender**: https://www.blender.org/ (GPL). Not bundled in this repository. The tool can download the official portable build (4.5.14) from `download.blender.org` into `Tool/runtime/blender` when the user agrees, after verifying its SHA-256; it is then the user's own copy under Blender's own license. Users may instead supply their own Blender.
 
 Lost Judgment GMD/DDS/Action files, VRMs, generated mods, private profiles and AI models are outside the public source. This project does not provide extraction procedures for game assets, circumvention of access controls, or redistribution.

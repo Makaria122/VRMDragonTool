@@ -47,7 +47,9 @@ class DragonWindow:
             try:
                 settings=json.loads(self.settings_file.read_text(encoding='utf-8'))
                 self.source_root.set(settings.get('source_root',''))
-                self.paths['blender'].set(settings.get('blender',self.paths['blender'].get()))
+                saved_blender=settings.get('blender')
+                if saved_blender and (Path(saved_blender).is_file() or not self.paths['blender'].get()):
+                    self.paths['blender'].set(saved_blender)
                 if isinstance(settings.get('include_variants'),bool):
                     saved_include_variants = settings['include_variants']
                 if settings.get('profile_mode') in ('simple','detailed'):
@@ -176,6 +178,27 @@ class DragonWindow:
         self.ai_buttons=[]
         for label,operation in [('Set up Ollama','setup'),('Download Qwen','download'),('Check status','status')]:
             b=ttk.Button(ai_tab,text=label,command=lambda op=operation:self.ai_action(op));b.pack(fill='x',pady=5);self.ai_buttons.append(b)
+        blender_tab=ttk.Frame(self.notebook,padding=14);self.notebook.add(blender_tab,text='Blender')
+        self.blender_tab=blender_tab
+        ttk.Label(blender_tab,text='Blender',font=('Segoe UI',14,'bold')).pack(anchor='w')
+        ttk.Label(blender_tab,text='The tool needs Blender 4.5 LTS. If you do not have it, it can be downloaded from the official '
+                  'server (download.blender.org) when you press the button. The download is checked against a pinned SHA-256 '
+                  'checksum and installed only inside Tool/runtime/blender. Nothing is downloaded without your confirmation. '
+                  'You can also choose a blender.exe you already have.',wraplength=700).pack(anchor='w',pady=(4,8))
+        self.blender_status=tk.StringVar(value='')
+        ttk.Label(blender_tab,textvariable=self.blender_status,wraplength=700).pack(anchor='w',pady=4)
+        self.blender_bar=ttk.Progressbar(blender_tab,mode='determinate',maximum=100);self.blender_bar.pack(fill='x',pady=6)
+        self.blender_progress=tk.StringVar(value='')
+        ttk.Label(blender_tab,textvariable=self.blender_progress).pack(anchor='w')
+        blender_row=ttk.Frame(blender_tab);blender_row.pack(fill='x',pady=8)
+        self.blender_install_button=ttk.Button(blender_row,text='Download and set up Blender',command=self.blender_install)
+        self.blender_install_button.pack(side='left',padx=(0,6))
+        self.blender_cancel_button=ttk.Button(blender_row,text='Cancel',command=self.blender_cancel_install,state='disabled')
+        self.blender_cancel_button.pack(side='left',padx=(0,6))
+        self.blender_choose_button=ttk.Button(blender_row,text='Choose my own blender.exe...',command=self.blender_choose)
+        self.blender_choose_button.pack(side='left')
+        self.blender_queue=queue.Queue();self.blender_busy=False;self.blender_cancel=threading.Event()
+        self.blender_refresh()
         storage_tab=ttk.Frame(self.notebook,padding=14);self.notebook.add(storage_tab,text='Storage')
         ttk.Label(storage_tab,text='Generated outputs',font=('Segoe UI',14,'bold')).pack(anchor='w')
         ttk.Label(storage_tab,text='Each conversion keeps its working files in Tool/userdata/outputs. Large working .blend files can '
@@ -211,6 +234,7 @@ class DragonWindow:
         self.root.protocol('WM_DELETE_WINDOW',self.close)
         if self.source_root.get():
             self.select_target()
+        self.root.after(600,self.blender_first_run)
 
     def select_target(self, _event=None):
         from um.dragon_targets import get_target, target_references
@@ -326,8 +350,117 @@ class DragonWindow:
         self.logs_status.set(f'Deleted {count} file(s).')
         self.logs_refresh()
 
+    def blender_usable(self):
+        value=self.paths['blender'].get().strip()
+        return bool(value) and Path(value).is_file()
+
+    def blender_refresh(self):
+        from um.dragon_blender_setup import BLENDER_SIZE,BLENDER_VERSION
+        if self.blender_usable():
+            self.blender_status.set('Blender is set: '+dragon_log.redact(self.paths['blender'].get()))
+        else:
+            self.blender_status.set(f'Blender was not found. Download Blender {BLENDER_VERSION} (about {BLENDER_SIZE/1e6:.0f} MB) '
+                                    'from the official server, or choose a blender.exe you already have.')
+
+    def blender_first_run(self):
+        if self.blender_usable() or self.blender_busy:
+            return
+        from um.dragon_blender_setup import BLENDER_SIZE,BLENDER_VERSION
+        nl=chr(10)
+        answer=messagebox.askyesnocancel('Blender not found',
+            'This tool needs Blender 4.5 LTS to convert avatars, but none was found.'+nl+nl+
+            f'Download Blender {BLENDER_VERSION} (about {BLENDER_SIZE/1e6:.0f} MB, about 1 GB after unpacking) from the official '
+            'server download.blender.org now? It is verified with a SHA-256 checksum and installed only inside the tool folder.'+nl+nl+
+            'Yes: download it.  No: choose a blender.exe you already have.  Cancel: decide later (see the Blender tab).')
+        self.notebook.select(self.blender_tab)
+        if answer is True:
+            self.blender_install()
+        elif answer is False:
+            self.blender_choose()
+
+    def blender_set_path(self,path):
+        self.paths['blender'].set(str(path))
+        self.save_settings()
+        self.blender_refresh()
+
+    def blender_choose(self):
+        if self.blender_busy:
+            return
+        chosen=filedialog.askopenfilename(title='Select blender.exe',filetypes=[('Blender executable','blender.exe'),('All files','*.*')])
+        if not chosen:
+            return
+        if Path(chosen).name.lower()!='blender.exe':
+            messagebox.showerror('Blender','Please select blender.exe (not another file).');return
+        self.blender_set_path(chosen)
+
+    def blender_install(self):
+        if self.blender_busy:
+            return
+        if self.blender_usable():
+            messagebox.showinfo('Blender','Blender is already set. Choose another blender.exe if you want to change it.');return
+        from um.dragon_blender_setup import BLENDER_SIZE,BLENDER_VERSION,BlenderInstaller
+        nl=chr(10)
+        if not messagebox.askokcancel('Download Blender',
+                f'Download Blender {BLENDER_VERSION} (about {BLENDER_SIZE/1e6:.0f} MB) from download.blender.org and install it in '
+                'Tool/runtime/blender?'+nl+'It needs about 2.5 GB of free disk space while installing.'):
+            return
+        self.blender_busy=True
+        self.blender_cancel=threading.Event()
+        self.blender_install_button.configure(state='disabled');self.blender_choose_button.configure(state='disabled')
+        self.blender_cancel_button.configure(state='normal')
+        self.blender_bar.configure(value=0);self.blender_progress.set('Starting...')
+        def work():
+            try:
+                exe=BlenderInstaller().install(progress=lambda event:self.blender_queue.put(('progress',event)),
+                                               cancel=self.blender_cancel)
+                self.blender_queue.put(('done',str(exe)))
+            except Exception as exc:
+                if 'Cancelled' not in str(exc):
+                    dragon_log.log_exception('Blender setup failed',exc)
+                self.blender_queue.put(('error',str(exc)))
+        threading.Thread(target=work,daemon=True).start()
+        self.root.after(100,self.blender_poll)
+
+    def blender_cancel_install(self):
+        self.blender_cancel.set()
+        self.blender_progress.set('Cancelling...')
+
+    def blender_poll(self):
+        finished=False
+        while True:
+            try:kind,data=self.blender_queue.get_nowait()
+            except queue.Empty:break
+            if kind=='progress':
+                total=data.get('total');current=data.get('current')
+                if total and current is not None:
+                    self.blender_bar.configure(value=100*current/total)
+                    unit='MB' if total>10**6 else 'items'
+                    scale=1e6 if unit=='MB' else 1
+                    self.blender_progress.set(f"{data['message']}: {current/scale:.0f} / {total/scale:.0f} {unit}")
+                else:
+                    self.blender_progress.set(data['message'])
+            else:
+                finished=True
+                self.blender_busy=False
+                self.blender_install_button.configure(state='normal');self.blender_choose_button.configure(state='normal')
+                self.blender_cancel_button.configure(state='disabled')
+                if kind=='done':
+                    self.blender_bar.configure(value=100);self.blender_progress.set('Done.')
+                    self.blender_set_path(data)
+                    messagebox.showinfo('Blender','Blender is installed and ready to use.')
+                else:
+                    self.blender_bar.configure(value=0)
+                    if 'Cancelled' in str(data):
+                        self.blender_progress.set('Cancelled. Nothing was installed.')
+                    else:
+                        self.blender_progress.set('Failed.')
+                        messagebox.showerror('Blender setup failed',str(data)+chr(10)+chr(10)+LOG_HINT)
+                    self.blender_refresh()
+        if not finished:
+            self.root.after(100,self.blender_poll)
+
     def storage_busy(self):
-        if self.oneclick_button.instate(['disabled']) or getattr(self,'ai_busy',False):
+        if self.oneclick_button.instate(['disabled']) or getattr(self,'ai_busy',False) or self.blender_busy:
             messagebox.showwarning('Busy','Please wait for the current task to finish.');return True
         return False
 
@@ -413,7 +546,7 @@ class DragonWindow:
             os.startfile(str(self.private_output_parent))
 
     def close(self):
-        if getattr(self,'ai_busy',False) or self.oneclick_button.instate(['disabled']):
+        if getattr(self,'ai_busy',False) or self.blender_busy or self.oneclick_button.instate(['disabled']):
             messagebox.showwarning('Busy','Please wait for the current task to finish before quitting.');return
         from um.dragon_local_ai import get_runtime
         get_runtime().close();self.save_settings();self.root.destroy()

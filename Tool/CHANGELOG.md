@@ -1,5 +1,17 @@
 # Changes
 
+## Storage tab: clean up generated outputs
+- New "Storage" tab lists the folders in `Tool/userdata/outputs` with their size and how much of it is working `.blend` files, and can delete selected folders or only their working `.blend` files (generated mods, reports and textures are kept). A confirmation shows the amount first.
+- Safety: only direct child folders of `Tool/userdata/outputs` can be deleted; links and junctions are never followed or removed, path tricks such as `..` are rejected, nothing is deleted while a conversion is running, and failures are reported per folder.
+
+## Foreign / unusual avatars
+- Head detection no longer depends on mesh names: if no mesh is labelled face (e.g. a part called `SWSkull`), meshes lying entirely above the neck become face. A region is now only required when the target has a separate GMD slot for it, so a hairless or faceless avatar converts for single-GMD targets (e.g. Tesso) and stops with a clear message for targets that need a separate hair/face GMD.
+- Avatars whose arms hang down (A-pose) no longer stop at the 50 cm correction limit: when the arm pose differs a lot from the target's, the upper arm is fitted as well, the move limit is 1 m, and accessory/twist groups (e.g. `lowerarm_twist_01`) follow the segment of the bone they are mapped to. Avatars with matching arms keep the previous recipe unchanged.
+- Verified on an Unreal-style skeleton avatar (SkeletonWarrior, Tesso target): clean T-pose result after the fix (it previously stopped, then showed detached hands before the twist-group fix). In-game appearance is unverified.
+
+## English UI
+- The GUI, progress messages and error messages are now in English (previously Japanese). The Japanese keywords the inventory uses to recognise VRM mesh names (for example hair/face/tail labels) are kept on purpose.
+
 ## Profile modes: simple (rules) and detailed (local AI)
 - New AI-free "simple" profile mode, now the GUI default (last choice is saved). Mesh regions come from the inventory classification (ambiguous head accessories become tops); unmatched VRM weight groups follow the nearest matched ancestor bone. Same schema and the same validation as the AI profile; undecidable cases stop with a hint to use detailed mode instead of guessing.
 - "Detailed" mode keeps the managed local Ollama/Qwen path unchanged and never reuses a rule-based cached profile. Simple mode never starts or contacts the local AI; the AI setup is only required for detailed mode.

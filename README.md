@@ -2,7 +2,7 @@
 
 An experimental tool that generates VRM replacement mods for Lost Judgment. It does not install anything into the game and does not extract game data. Each user supplies the Chara folder extracted from a game they own, and a VRM they have the right to use.
 
-**For setup, usage and limitations, see [Tool/README.md](Tool/README.md).** (The GUI itself is currently in Japanese.)
+**For setup, usage and limitations, see [Tool/README.md](Tool/README.md).**
 
 - An AI-free simple mode (default) and a detailed mode that uses a tool-owned Ollama/Qwen. The tool never connects to a global Ollama.
 - Looks up the reference GMDs of registered characters and outfits in your extracted folder.

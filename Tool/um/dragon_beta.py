@@ -167,7 +167,7 @@ def build(profile_file: str | Path, vrm_file: str | Path, output_folder: str | P
         private_dds.mkdir(parents=True)
         for texture in textures:
             shutil.copyfile(texture, private_dds / texture.name)
-        progress('私用GMDコピーとDDSを準備しました')
+        progress('Prepared private GMD copies and DDS files')
         for region, slot in slots.items():
             target_gmd = output / 'chara' / slot.region / slot.stem / (slot.stem + '.gmd')
             target_gmd.parent.mkdir(parents=True)
@@ -199,10 +199,10 @@ def build(profile_file: str | Path, vrm_file: str | Path, output_folder: str | P
         trial_max = poses[0]['max_edge_stretch'] if poses else None
         problems = []
         if poses and (trial_p95 > reference_p95 * 1.25 or trial_max > reference_max * 1.5):
-            problems.append(f'動作中の胴体伸縮: p95 {trial_p95:.3f} (元 {reference_p95:.3f}), '
-                            f'最大 {trial_max:.3f} (元 {reference_max:.3f})')
+            problems.append(f'Torso stretch during motion: p95 {trial_p95:.3f} (original {reference_p95:.3f}), '
+                            f'max {trial_max:.3f} (original {reference_max:.3f})')
         if any(r.get('has_accessory_collapse') for r in results):
-            problems.append('髪・尻尾などの補助骨ウェイトが親骨へ縮退している')
+            problems.append('Accessory-bone weights (hair, tail, ...) have collapsed onto their parent bones')
         status = {'status': ('MOTION_CHECK_FAILED' if poses else 'GEOMETRY_CHECK_FAILED') if problems else ('MANUAL_REVIEW_REQUIRED' if poses else 'MOTION_NOT_RUN'),
                   'motion_validation': 'RUN' if poses else 'MOTION_NOT_RUN',
                   'motion_quality_passed': bool(poses) and not problems,
@@ -227,7 +227,7 @@ def build(profile_file: str | Path, vrm_file: str | Path, output_folder: str | P
                       + (f'- Tops p95 edge stretch: {trial_p95:.3f} vs original {reference_p95:.3f}.\n' if poses else '- Motion validation: NOT RUN (no Action provided).\n') +
                       f'- Validation result: **{status["status"]}**.\n'
                       f'- Topology warnings: {len(status["geometry_warnings"])}.\n')
-        progress(f'{len(slots)}個の対象GMDの往復・動作点検完了。結果を確認してください。')
+        progress(f'Round trip and motion check finished for {len(slots)} target GMD(s). Please review the results.')
         return status
     except Exception as exc:
         status_file.write_text(json.dumps({'status': 'BLOCKED_PIPELINE_ERROR',

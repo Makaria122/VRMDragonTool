@@ -13,7 +13,7 @@ MODEL = os.environ.get('UM_DRAGON_LOCAL_MODEL', 'qwen2.5-coder:7b')
 DETERMINISTIC_METHOD = 'deterministic'
 DETERMINISTIC_RULES = 'deterministic-rules-v1'
 PROFILE_MODES = ('simple', 'detailed')  # simple: rules only; detailed: managed local AI
-SIMPLE_MODE_HINT = '簡易モードでは判断できません。詳細モード（ローカルAI）を試してください'
+SIMPLE_MODE_HINT = 'The simple mode cannot decide this. Try the detailed mode (local AI)'
 
 
 class LocalProfileError(ValueError):
@@ -110,7 +110,7 @@ def _nearest_matched_target(group: str, parents: dict, targets_by_source: dict) 
     return None
 
 
-def create_deterministic(inventory: dict, fit_plan: dict, output: str | Path) -> dict:
+def create_deterministic(inventory: dict, fit_plan: dict, output: str | Path, slots=None) -> dict:
     """Rule-based profile (no AI): same schema and the same validation as the AI profile.
 
     Regions come from the inventory's own classification (ambiguous head accessories become
@@ -135,8 +135,8 @@ def create_deterministic(inventory: dict, fit_plan: dict, output: str | Path) ->
         if target is None:unresolved.append(group)
         else:hints.append({'source_group':group,'suggested_target':target})
     if unresolved:
-        raise LocalProfileError('VRMの骨 '+', '.join(unresolved[:6])+(' …' if len(unresolved)>6 else '')
-                                +' の割り当て先を骨の親子から決められません。'+SIMPLE_MODE_HINT)
+        raise LocalProfileError('Cannot decide the target bone for VRM bone(s) '+', '.join(unresolved[:6])+(' …' if len(unresolved)>6 else '')
+                                +' from the bone hierarchy. '+SIMPLE_MODE_HINT)
     ground=inventory['ground_alignment']
     correction=ground.get('measured_correction_m')
     if type(correction) not in (int,float):
@@ -148,18 +148,18 @@ def create_deterministic(inventory: dict, fit_plan: dict, output: str | Path) ->
     result=_validate(proposed,inventory,fit_plan)
     result['model']=DETERMINISTIC_RULES
     result['profile_method']=DETERMINISTIC_METHOD
-    return _finish(result,rows,inventory,output,require_candidates=True)
+    return _finish(result,rows,inventory,output,require_candidates=True,slots=slots)
 
 
-def create(inventory: dict, fit_plan: dict, output: str | Path, mode: str = 'detailed') -> dict:
+def create(inventory: dict, fit_plan: dict, output: str | Path, mode: str = 'detailed', slots=None) -> dict:
     if mode not in PROFILE_MODES:
         raise LocalProfileError(f'Unknown profile mode: {mode}')
     if mode == 'simple':
-        return create_deterministic(inventory,fit_plan,output)
-    return _create_with_ai(inventory,fit_plan,output)
+        return create_deterministic(inventory,fit_plan,output,slots)
+    return _create_with_ai(inventory,fit_plan,output,slots)
 
 
-def _create_with_ai(inventory: dict, fit_plan: dict, output: str | Path) -> dict:
+def _create_with_ai(inventory: dict, fit_plan: dict, output: str | Path, slots=None) -> dict:
     output=Path(output).expanduser().resolve()
     if output.exists():
         raise LocalProfileError('Per-VRM profile output already exists')
@@ -224,26 +224,42 @@ def _create_with_ai(inventory: dict, fit_plan: dict, output: str | Path) -> dict
         result=_validate(proposed,inventory,fit_plan)
     except (KeyError,TypeError,json.JSONDecodeError) as exc:
         raise LocalProfileError(f'Local Ollama returned invalid profile JSON: {exc}') from exc
-    return _finish(result,rows,inventory,output)
+    return _finish(result,rows,inventory,output,slots=slots)
 
 
 def _finish(result: dict, rows: list[dict], inventory: dict, output: Path,
-            require_candidates: bool = False) -> dict:
-    missing={'tops','face','hair'}-set(result['mesh_regions'].values())
+            require_candidates: bool = False, slots=None) -> dict:
+    """Make sure every export slot has at least one mesh; slots default to tops/face/hair."""
+    slots=[tuple(slot) for slot in slots] if slots else [('tops',),('face',),('hair',)]
+    regions=result['mesh_regions']
+    def filled(slot): return any(value in slot for value in regions.values())
+    priority={'body mesh entirely above neck':0,'eye/face name':1,'face name':1,
+              'head/hair name':0,'hair material near head':1,'body/outfit below head':2}
+    neck=inventory.get('neck_z_m')
     adjustments=[]
-    for region in sorted(missing):
-        candidates=[row for row in rows if row.get('region')==region]
-        if not candidates:
-            raise LocalProfileError(f'VRM inventory has no mesh candidate for required region: {region}'
+    def move(row,region,reason):
+        name=row['object']
+        adjustments.append({'mesh':name,'from':regions[name],'to':region,'reason':reason})
+        regions[name]=region
+    for slot in slots:
+        if filled(slot):
+            continue
+        for region in slot:
+            candidates=[row for row in rows if row.get('region')==region]
+            if candidates:
+                move(min(candidates,key=lambda row:priority.get(row.get('reason',''),3)),region,
+                     'ensured one candidate for each GMD region using deterministic inventory')
+            elif region=='face' and isinstance(neck,(int,float)):
+                # Names can be anything on foreign avatars; geometry still shows what is the head.
+                for row in rows:
+                    if isinstance(row.get('min_z_m'),(int,float)) and row['min_z_m']>neck-.12 and regions[row['object']]!='hair':
+                        move(row,'face','geometry fallback: mesh lies entirely above the neck')
+            if filled(slot):
+                break
+    for slot in slots:
+        if not filled(slot):
+            raise LocalProfileError('VRM inventory has no mesh candidate for required region: '+'/'.join(slot)
                                     +(' ('+SIMPLE_MODE_HINT+')' if require_candidates else ''))
-        priority={'body mesh entirely above neck':0,'eye/face name':1,'face name':1,
-                  'head/hair name':0,'hair material near head':1,'body/outfit below head':2}
-        selected=min(candidates,key=lambda row:priority.get(row.get('reason',''),3))
-        name=selected['object']
-        previous=result['mesh_regions'][name]
-        result['mesh_regions'][name]=region
-        adjustments.append({'mesh':name,'from':previous,'to':region,
-                            'reason':'ensured one candidate for each GMD region using deterministic inventory'})
     result['coverage_adjustments']=adjustments
     for decision in result['mesh_decisions']:
         decision['region']=result['mesh_regions'][decision['mesh']]

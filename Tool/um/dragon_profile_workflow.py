@@ -74,7 +74,7 @@ def create_avatar_profile(vrm: str | Path, references: dict[str,str | Path],
     stamp=datetime.now().strftime('%Y%m%d_%H%M%S_%f')
     output=folder/f'avatar-profile_{stamp}.json'
     fit_hashes=reference_hashes(references)
-    progress('VRMとGMD参照を点検してプロファイル用データを準備中…')
+    progress('Inspecting the VRM and GMD references to prepare profile data...')
     with tempfile.TemporaryDirectory(prefix='.profile_work_',dir=folder) as temp:
         work=Path(temp)
         workspace=work/'source.blend'
@@ -92,10 +92,12 @@ def create_avatar_profile(vrm: str | Path, references: dict[str,str | Path],
         inventory=json.loads(inventory_file.read_text(encoding='utf-8'))
         if any(row.get('unweighted_vertices',0) for row in inventory.get('meshes',[])):
             raise LocalProfileError('Unweighted VRM vertices prevent a safe reusable profile')
-        progress('ローカルOllamaでプロファイルを作成中…' if profile_mode=='detailed'
-                 else 'ルールでプロファイルを作成中（簡易モード）…')
+        progress('Creating the profile with the local Ollama...' if profile_mode=='detailed'
+                 else 'Creating the profile with rules (simple mode)...')
         # Keep partial output out of the reusable profile directory.
-        profile=create_local(inventory,mapping['fit_plan'],work/'avatar-profile.json',profile_mode)
+        from um.dragon_targets import get_target
+        profile=create_local(inventory,mapping['fit_plan'],work/'avatar-profile.json',profile_mode,
+                             [slot.source_regions for slot in get_target(target_id).slots])
     profile.update({'source_vrm':str(vrm),'source_vrm_sha256':_digest(vrm),
                     'source_references':fit_hashes,
                     'source_mesh_names':sorted(row['object'] for row in inventory['meshes']),
@@ -161,7 +163,7 @@ def load_cached_profile(vrm: str | Path, references: dict[str,str | Path],
                  'ground_action':action,
                  'foot_fit_targets':profile['foot_fit_targets']}
             _validate(raw,inventory,fit_plan)
-            if set(profile['mesh_regions'].values())!={'tops','face','hair'}:
+            if not set(profile['mesh_regions'].values())<={'tops','face','hair'}:
                 continue
             return profile
         except (OSError,ValueError,KeyError,TypeError,json.JSONDecodeError):

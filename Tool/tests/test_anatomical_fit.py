@@ -5,7 +5,7 @@ from pathlib import Path
 
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 
-from um.dragon_anatomical_fit import fit_points, recipe
+from um.dragon_anatomical_fit import alias_weights, fit_points, recipe
 
 
 def anchors(pose):
@@ -80,6 +80,57 @@ class AnatomicalFitTests(unittest.TestCase):
         with self.assertRaises(ValueError) as ctx:
             fit_points([[0, 0, .1]], [{'leftFoot': 1.0}], r)
         self.assertIn('50cm', str(ctx.exception))
+
+
+def with_arms(inv, source_down):
+    # Target arms are raised sideways (T-pose); the VRM arms either match or hang down (A-pose).
+    target = {'UpperArm': (.2, 0, 1.5), 'LowerArm': (.5, 0, 1.5), 'Hand': (.8, 0, 1.5),
+              'MiddleProximal': (.9, 0, 1.5)}
+    hanging = {'UpperArm': (.2, 0, 1.5), 'LowerArm': (.35, 0, 1.2), 'Hand': (.45, 0, .9),
+               'MiddleProximal': (.48, 0, .8)}
+    for side, sign in (('left', 1), ('right', -1)):
+        for role in target:
+            src = hanging[role] if source_down else target[role]
+            inv['joint_anchors'][side + role] = {
+                'source_bone': side + role, 'target_bone': 't' + side + role,
+                'source': [sign * src[0], src[1], src[2]], 'target': [sign * target[role][0], 0, target[role][2]]}
+    return inv
+
+
+class ArmPoseTests(unittest.TestCase):
+    def test_matching_arms_keep_the_original_recipe(self):
+        r = recipe(with_arms(inventory('standing'), source_down=False))
+        self.assertNotIn('leftUpperArm', r['hand_segments'])
+        self.assertNotIn('max_move_m', r)
+
+    def test_hanging_arms_fit_the_upper_arm_too_and_allow_a_larger_move(self):
+        r = recipe(with_arms(inventory('standing'), source_down=True))
+        self.assertIn('leftUpperArm', r['hand_segments'])
+        self.assertIn('rightUpperArm', r['hand_segments'])
+        self.assertEqual(r['max_move_m'], 1.0)
+        # The forearm segment itself is still the elbow->wrist one (not overwritten).
+        fore = r['hand_segments']['leftLowerArm']
+        self.assertAlmostEqual(fore['length_ratio'], 0.3 / math.dist((.1, 0, -.3), (0, 0, 0)), places=3)
+        points = [[.45, 0, .9], [.35, 0, 1.2]]
+        out = fit_points(points, [{'leftHand': 1.0}, {'leftLowerArm': 1.0}], r)
+        self.assertTrue(math.dist(out[1], [.5, 0, 1.5]) < 1e-6)  # elbow lands on the target elbow
+
+    def test_twist_groups_follow_the_forearm_only_when_the_pose_is_refitted(self):
+        roles = [{'source_bone': 'leftLowerArm', 'target_bone': 'tleftLowerArm'}]
+        hints = [{'source_group': 'lowerarm_twist', 'suggested_target': 'tleftLowerArm'},
+                 {'source_group': 'jaw', 'suggested_target': 'face_c_n'}]
+        weights = [{'lowerarm_twist': .5, 'leftLowerArm': .25, 'jaw': .25}]
+        hanging = recipe(with_arms(inventory('standing'), source_down=True))
+        out = alias_weights(weights, hanging, roles, hints)
+        self.assertEqual(out, [{'leftLowerArm': .75, 'jaw': .25}])
+        matching = recipe(with_arms(inventory('standing'), source_down=False))
+        self.assertEqual(alias_weights(weights, matching, roles, hints), weights)
+
+    def test_move_limit_value_is_validated(self):
+        r = recipe(inventory('standing'))
+        r['max_move_m'] = 5.0
+        with self.assertRaises(ValueError):
+            fit_points([[0, 0, 1.0]], [{'hips': 1.0}], r)
 
 
 if __name__ == '__main__':

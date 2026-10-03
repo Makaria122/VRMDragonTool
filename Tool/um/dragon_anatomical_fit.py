@@ -15,6 +15,49 @@ def unit(a):
     return [v/length for v in a],length
 
 
+def _angle_deg(a,b):
+    try: (u,_),(v,_)=unit(a),unit(b)
+    except ValueError: return 0.0
+    return math.degrees(math.acos(max(-1.0,min(1.0,dot(u,v)))))
+
+
+ARM_POSE_DEGREES = 30  # arms hanging (A-pose) vs the target's raised arms need the upper arm fitted too
+
+
+def _arm_pose_differs(anchors):
+    for side in ('left','right'):
+        names=[side+x for x in ('UpperArm','LowerArm','Hand')]
+        if not all(n in anchors for n in names): continue
+        for first,second in zip(names,names[1:]):
+            vectors={k:sub(anchors[second][k],anchors[first][k]) for k in ('source','target')}
+            if _angle_deg(vectors['source'],vectors['target'])>ARM_POSE_DEGREES: return True
+    return False
+
+
+def alias_weights(weights, config, matched_roles, hints):
+    """Let accessory/twist groups follow the fitted segment of the bone they are mapped to.
+
+    Only for recipes that change limb poses (flag `alias_hinted_groups`); without it, or for groups
+    mapped to bones without a segment, the weights are returned unchanged.
+    """
+    if not config.get('alias_hinted_groups'): return weights
+    segments=config['hand_segments']
+    segment_for_target={row['target_bone']:row['source_bone'] for row in matched_roles}
+    alias={}
+    for hint in hints:
+        source=segment_for_target.get(hint['suggested_target'])
+        if source in segments and hint['source_group'] not in segments:
+            alias[hint['source_group']]=source
+    if not alias: return weights
+    result=[]
+    for influences in weights:
+        row={}
+        for name,weight in influences.items():
+            name=alias.get(name,name);row[name]=row.get(name,0)+weight
+        result.append(row)
+    return result
+
+
 def recipe(inventory):
     anchors=inventory.get('joint_anchors',{})
     required=('hips','leftLowerLeg','rightLowerLeg','leftFoot','rightFoot')
@@ -39,9 +82,11 @@ def recipe(inventory):
         legs=[side+part for side in ('left','right') for part in ('UpperLeg','LowerLeg','Foot','Toes')]
         if not all(role in anchors for role in legs):
             raise ValueError('Leg proportion correction outside supported bounds')
+    arm_pose=_arm_pose_differs(anchors)
     segments={}
     for side in ('left','right'):
         chains=[[side+'LowerArm',side+'Hand',side+'MiddleProximal']]
+        if arm_pose: chains.append([side+'UpperArm',side+'LowerArm'])  # only the upper arm is new
         if pose_mode: chains.append([side+'UpperLeg',side+'LowerLeg',side+'Foot',side+'Toes'])
         for finger in ('Thumb','Index','Middle','Ring','Little'):
             parts=('Metacarpal','Proximal','Distal') if side+finger+'Metacarpal' in anchors else ('Proximal','Intermediate','Distal')
@@ -50,6 +95,7 @@ def recipe(inventory):
             if not all(role in anchors for role in chain): continue
             for i,role in enumerate(chain):
                 if role.endswith('MiddleProximal') and chain[0].endswith('LowerArm'): continue
+                if chain[0].endswith('UpperArm') and i==1: continue  # LowerArm already set by the forearm chain
                 current=anchors[role]
                 if i+1<len(chain):
                     nxt=anchors[chain[i+1]]
@@ -64,9 +110,11 @@ def recipe(inventory):
                     'source_axis':su,'target_axis':tu,'length_ratio':tl/sl}
     if pose_mode:
         return {'version':VERSION,'mode':POSE_MODE,'max_move_m':POSE_MAX_MOVE_M,
-                'hand_segments':segments,'game_install_changed':False}
-    return {'version':VERSION,'source_heights':heights[0],'target_heights':heights[1],
+                'alias_hinted_groups':True,'hand_segments':segments,'game_install_changed':False}
+    result={'version':VERSION,'source_heights':heights[0],'target_heights':heights[1],
             'hand_segments':segments,'game_install_changed':False}
+    if arm_pose: result.update(max_move_m=POSE_MAX_MOVE_M,alias_hinted_groups=True)
+    return result
 
 
 def fit_points(points,weights,config):
@@ -74,9 +122,8 @@ def fit_points(points,weights,config):
     if len(points)!=len(weights): raise ValueError('Weight count mismatch')
     pose_mode=config.get('mode')==POSE_MODE
     max_move=config.get('max_move_m',.5)
-    if pose_mode:
-        if not 0<max_move<=1.5: raise ValueError('Invalid anatomical move limit')
-    else:
+    if not 0<max_move<=1.5: raise ValueError('Invalid anatomical move limit')
+    if not pose_mode:
         s,t=config['source_heights'],config['target_heights']
         if any(len(v)!=4 or any(not math.isfinite(x) for x in v)
                or any(b-a<.005 for a,b in zip(v,v[1:])) for v in (s,t)):

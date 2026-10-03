@@ -33,7 +33,7 @@ def _blender(blender: Path, scene: Path, script: str, arguments: list[Path], pro
     try:
         proc=subprocess.run(cmd,capture_output=True,text=True,errors='replace',timeout=360)
     except subprocess.TimeoutExpired as exc:
-        raise OneClickError(f'{script}: 360秒でタイムアウト') from exc
+        raise OneClickError(f'{script}: timed out after 360 seconds') from exc
     if proc.returncode or not arguments[-1].is_file():
         detail='\n'.join((proc.stderr+'\n'+proc.stdout).splitlines()[-22:])
         raise OneClickError(f'{script} failed: {detail[-3500:]}')
@@ -75,9 +75,9 @@ def run(vrm: str | Path, references: dict[str,str | Path], blender: str | Path,
     for path in (vrm,*([action] if action else []),*([baseline] if baseline else []),*refs.values(),*([dummy_dir] if dummy_dir else []),output):
         _private(path,bundle)
     if output.exists() or not output.parent.is_dir():
-        raise OneClickError('出力先はゲーム/ツール外の新規フォルダにしてください')
+        raise OneClickError('Choose a NEW output folder outside the game and the tool')
     if not blender.is_file() or not (addon/'yk_gmd_blender'/'__init__.py').is_file():
-        raise OneClickError('ローカルBlenderとGMDアドオンが必要です')
+        raise OneClickError('Local Blender and the GMD add-on are required')
     output.mkdir()
     if dummy_dir is None:
         from um.dragon_neutral_maps import write_neutral_maps
@@ -93,7 +93,7 @@ def run(vrm: str | Path, references: dict[str,str | Path], blender: str | Path,
                    '- User-owned Lost Judgment references only; originals/game/installed MODs unchanged.\n'
                    '- Mods-format output and validation results are recorded locally.\n',encoding='utf-8')
     try:
-        progress('VRMと元GMDを詳細点検中…')
+        progress('Inspecting the VRM and the original GMDs in detail...')
         workspace=output/'source_reference.blend'
         if target_id == 'yagami':
             checked=inspect_blender(vrm,refs['tops'],blender,addon,refs['face'],refs['hair'],
@@ -112,7 +112,7 @@ def run(vrm: str | Path, references: dict[str,str | Path], blender: str | Path,
             shared=None
         if shared:
             checked['fit_plan']=copy.deepcopy(shared['fit_plan'])
-            progress(f'骨格グループ一致: {shared["owner"]} の骨対応・位置合わせを再利用します')
+            progress(f'Skeleton group match: reusing the bone mapping and alignment of {shared["owner"]}')
         (output/'bone_map.json').write_text(json.dumps(checked,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
         if action is not None and baseline is None:
             baseline=output/f'{target_id}_proxy_original_pose.json'
@@ -135,7 +135,7 @@ def run(vrm: str | Path, references: dict[str,str | Path], blender: str | Path,
             _blender(blender,workspace,'dragon_alignment_worker.py',[output/'bone_map.json',align],progress)
         preview=output/'spatial_preview.blend'
         _blender(blender,workspace,'dragon_alignment_preview.py',[align,preview],progress)
-        progress('VRMの画像を個人用DDSへ変換中…')
+        progress('Converting VRM images to private DDS files...')
         textures=extract(vrm,output/'textures',target_id=target_id)
         # Dummy slots also live in a global game texture namespace. Isolate them
         # with the avatar textures and pass the exact names to the GMD worker.
@@ -163,7 +163,7 @@ def run(vrm: str | Path, references: dict[str,str | Path], blender: str | Path,
         _blender(blender,preview,'dragon_generic_inventory.py',[output/'bone_map.json',inventory],progress)
         items=json.loads(inventory.read_text(encoding='utf-8'))
         if any(row['unweighted_vertices'] for row in items['meshes']):
-            raise OneClickError('無ウェイト頂点があり、プロファイルだけでは安全に補完できません')
+            raise OneClickError('Unweighted vertices exist and cannot be completed safely from a profile alone')
         from um.dragon_profile_workflow import load_cached_profile, reference_hashes, role_mappings
         profile_root=Path(profile_root).resolve() if profile_root is not None else output.parent.parent/'Profiles'
         if shared:
@@ -173,12 +173,13 @@ def run(vrm: str | Path, references: dict[str,str | Path], blender: str | Path,
             avatar_profile=load_cached_profile(vrm,refs,items,checked['fit_plan'],profile_root,target_id,
                                                require_ai=profile_mode=='detailed')
         if avatar_profile:
-            progress('既存の同一VRMプロフィールを再利用中…')
+            progress('Reusing the existing profile of the same VRM...')
         else:
-            progress('ローカルOllamaでこのVRM専用プロファイルを作成中…' if profile_mode=='detailed'
-                     else 'ルールでこのVRM専用プロファイルを作成中（簡易モード）…')
+            progress('Creating this VRM profile with the local Ollama...' if profile_mode=='detailed'
+                     else 'Creating this VRM profile with rules (simple mode)...')
             from um.dragon_local_profile import create as create_local_profile
-            avatar_profile=create_local_profile(items,checked['fit_plan'],output/'avatar-profile.json',profile_mode)
+            avatar_profile=create_local_profile(items,checked['fit_plan'],output/'avatar-profile.json',profile_mode,
+                                                [slot.source_regions for slot in target.slots])
             avatar_profile['target_id']=target_id
             avatar_profile['source_vrm']=str(vrm)
             avatar_profile['source_vrm_sha256']=_digest(vrm)
@@ -200,13 +201,15 @@ def run(vrm: str | Path, references: dict[str,str | Path], blender: str | Path,
             row['region']=avatar_profile['mesh_regions'][row['object']]
             row['reason']=f'{"LOCAL_AI_PROFILE" if avatar_profile.get("profile_method")!="deterministic" else "RULE_PROFILE"}: {row["region"]}; {row.get("reason","")}'
         inventory.write_text(json.dumps(items,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
-        if any(not any(row['region']==role for row in items['meshes']) for role in REGIONS):
-            raise OneClickError('ローカルAIプロファイルに顔・髪・胴体すべての領域がありません')
+        for slot in target.slots:
+            if not any(row['region'] in slot.source_regions for row in items['meshes']):
+                raise OneClickError('The profile has no mesh for the '+'/'.join(slot.source_regions)
+                                    +' part of this target; the VRM may lack that part')
         matmap={m['material_name'] for m in textures['materials']}
         unknown_mats={name for row in items['meshes'] for name in row['materials']
                       if re.sub(r'\.\d{3}$','',name) not in matmap}
         if unknown_mats:
-            raise OneClickError(f'DDSに対応しないVRM材質: {sorted(unknown_mats)}')
+            raise OneClickError(f'VRM materials without a matching DDS: {sorted(unknown_mats)}')
         scale=json.loads(align.read_text(encoding='utf-8'))['uniform_scale']
         for slot in target.slots:
             role=slot.key
@@ -233,9 +236,9 @@ def run(vrm: str | Path, references: dict[str,str | Path], blender: str | Path,
                  'original_pose_report':str(baseline) if baseline else None,'mesh_offsets':{},'target_id':target_id}
         profile_file=output/'beta-profile.json'
         profile_file.write_text(json.dumps(profile,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
-        progress(f'{len(target.slots)}個の対象GMD候補を作成・再読込・オフライン動作で点検中…')
+        progress(f'Creating, re-importing and offline-checking {len(target.slots)} target GMD candidate(s)...')
         candidate=build(profile_file,vrm,output/'Candidate',blender,addon,progress=progress)
-        progress('ゲーム外のMods形式にまとめています（ゲームへの導入はしません）…')
+        progress('Packaging into a Mods-format folder outside the game (nothing is installed)...')
         title=('VRM '+target.label+' '+vrm.stem)[:60]
         pack=package(output/'Candidate',output/'ReviewPack',title,target_id=target_id)
         foot_fit_applied={}

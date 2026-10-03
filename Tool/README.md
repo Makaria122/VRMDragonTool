@@ -2,8 +2,6 @@
 
 Generates review-only replacement mod candidates from a VRM, using GMD files that **you extracted yourself from a game you own**. No game assets, VRMs, motion Actions or AI models are distributed. The tool never extracts game data and never installs anything into the game.
 
-> The GUI is currently in Japanese. UI labels are quoted below in Japanese with an English description.
-
 ## First-time setup (Windows)
 
 1. Prepare Python 3.10+ (with Tkinter) and Blender 4.5.x. Python/Tkinter must currently be installed separately. Blender can be selected in the GUI, or placed at `Tool/runtime/blender/blender.exe`.
@@ -12,15 +10,15 @@ Generates review-only replacement mod candidates from a VRM, using GMD files tha
 
 ### Profile modes
 
-Choose the mode under "プロファイル作成" (profile creation) on the conversion tab. Your last choice is saved.
+Choose the mode under "Profile creation" on the "One-click mod" tab. Your last choice is saved.
 
 - **Simple (default, no AI):** mesh regions (tops/face/hair) come from the rule-based classification of the inspection step; head accessories the rules cannot classify become tops. A weight group that exists only in the VRM is assigned to the nearest matched ancestor bone in the VRM's bone hierarchy. The "detailed mode" setup below is not needed. If the rules cannot decide (a region is missing, or a bone has no matched ancestor) the tool stops and says why. The result goes through the same validation as the detailed mode.
 - **Detailed (local AI):** the previous behaviour. A tool-owned Ollama/Qwen proposes the classification and bone mapping, and the result goes through the same validation. Set it up as follows.
 
 Setup for the detailed mode only:
 
-4. Open "AIセットアップ" (AI setup) → "Ollamaをセットアップ" (set up Ollama) and confirm. The official Windows portable release is verified with SHA-256 and placed in `Tool/runtime/ollama`. It needs roughly 1.5 GB of download plus extraction/temporary space.
-5. Press "Qwenをダウンロード" (download Qwen). `qwen2.5-coder:7b` is about 5 GB, so make sure you have enough disk space and RAM/VRAM. Models are stored in `Tool/runtime/models`.
+4. Open the "AI setup" tab → "Set up Ollama" and confirm. The official Windows portable release is verified with SHA-256 and placed in `Tool/runtime/ollama`. It needs roughly 1.5 GB of download plus extraction/temporary space.
+5. Press "Download Qwen". `qwen2.5-coder:7b` is about 5 GB, so make sure you have enough disk space and RAM/VRAM. Models are stored in `Tool/runtime/models`.
 
 Downloads only happen on these explicit actions. Conversion never downloads Ollama or a model by itself, and the tool never connects to an existing global Ollama.
 
@@ -31,8 +29,10 @@ Ollama runs as a separate process started from the executable inside the tool fo
 1. Select the **Chara folder** you extracted from your game. Registered GMD file names are searched recursively, whether the folder has the original layout, a per-model-ID layout or a flat layout.
 2. Choose the target character; the tops/face/hair references are filled in automatically. Layouts such as a single GMD, or face+hair combined, are resolved by registered recipes.
 3. If a reference is missing, the tool stops. It also stops when several GMDs share a name but differ in content; only identical duplicates are resolved deterministically. A different character or outfit is never substituted just because the bone count matches.
-4. Select the VRM, Blender and the add-on, then press "自動作成" (create automatically). This runs mesh classification and bone mapping (rules in simple mode, local AI in detailed mode), anatomical fitting, material assignment, GMD export and a strict re-import.
-5. To also generate outfit/event/cutscene variants, turn on "参照が見つかった切替先も個別検証・生成" (also validate and generate switch targets whose references were found). It is on by default and your choice is remembered. Finding a reference is not a validation pass; validation happens when each variant is generated.
+4. Select the VRM, Blender and the add-on, then press "Create mod pack from VRM automatically (beta, no game install)". This runs mesh classification and bone mapping (rules in simple mode, local AI in detailed mode), anatomical fitting, material assignment, GMD export and a strict re-import.
+5. To also generate outfit/event/cutscene variants, turn on "Also validate and generate switch targets whose references were found (unverified in-game)". It is on by default and your choice is remembered. Finding a reference is not a validation pass; validation happens when each variant is generated.
+
+Each conversion leaves its working files (large working `.blend` files in particular) in `Tool/userdata/outputs`. Use the "Storage" tab to see the sizes and delete selected output folders, or only their working `.blend` files while keeping the generated mods. Deleting cannot be undone.
 
 References are read-only. Local settings, profiles and outputs are stored under `Tool/userdata` (not tracked by Git). Those files contain your paths and asset information, so do not publish them. Keep the extracted folder itself outside any Git-managed folder.
 
@@ -44,6 +44,7 @@ If you provide a motion Action `.blend`, each model is compared against its orig
 
 - Yagami, Kaito, and experimentally Sugiura, Tsukumo, Saori, Higashi, Tesso, Kuwana, Soma, Akutsu, Genda, Hoshino, Mafuyu and Sawa are registered.
 - Some registered outfit, event and cutscene layouts are supported too. Kuwana includes the `c04bd01`, `c10bd01` and `army` tops, plus the user-approved young-era `c_cm_x_kuwana_30` (a single GMD that contains the face). Yagami also covers `c07bd01`, `c07bd02` and the seated `c07_chair` (for seated poses the legs are fitted to the target's bone directions). These were only checked up to the strict round trip; in-game posture, expression and switching are unverified. For Sawa, the user-approved `c_aw_sawa_18`, `c_aw_sawa_dead` and `c_aw_sawa_sit` are also part of switch-target generation, giving four layouts including the normal one, each written to its own GMD. The three extra Sawa layouts passed the reference strict round trip, but their in-game posture and expression for young/dead/seated states are unverified. The different character Amasawa is not included. Not every in-game model switch is covered.
+- Avatars with unusual part names or poses: the head is also recognised by geometry (meshes entirely above the neck), arms that hang down are fitted to the target's raised arms, and a part the avatar lacks (for example hair) is only an error for targets that need a separate GMD for it. Such avatars are still review candidates; check the result carefully.
 - Even for the same character and the same VRM, adjustments are shared only between groups whose measured bone names, parents and rest matrices match. Outfit-dependent ground contact is measured again every time, and materials, export and strict validation run per model.
 - The ground plane is measured from vertices weighted at least 25% to the foot/toes, using the support surface below the ankle. A name such as "bandage" never decides the floor. If it cannot be measured, the tool stops for review.
 - Diffuse maps are generated from the VRM. The four auxiliary slots (multi/normal/rt/rd) always get procedurally generated neutral DDS files. DDS and GMD references are separated into a namespace made from the target character plus the VRM content hash.

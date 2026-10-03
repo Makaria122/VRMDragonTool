@@ -17,7 +17,7 @@ from mathutils import Vector
 
 sys.path.insert(0,str(Path(__file__).resolve().parent))
 from dragon_geometry_fit import bounded_offsets, limiting_edge, weighted_bone_offsets
-from dragon_anatomical_fit import fit_points
+from dragon_anatomical_fit import alias_weights, fit_points
 from dragon_material_maps import (apply_dummy_maps, verify_dummy_references,
                                   select_material_template, apply_matte_specular)
 
@@ -231,6 +231,7 @@ def run(job):
                 raise RuntimeError('Do not combine anatomical fit with older displacement solvers')
             points=[list(v.co) for v in obj.data.vertices]
             weights=[{group_names[w.group]:w.weight for w in v.groups} for v in source.data.vertices]
+            weights=alias_weights(weights,job['anatomical_fit'],job['matched_roles'],job.get('accessory_parent_hints',[]))
             corrected=fit_points(points,weights,job['anatomical_fit'])
             shifts=[Vector(b)-Vector(a) for a,b in zip(points,corrected)]
             for vertex,point in zip(obj.data.vertices,corrected): vertex.co=point

@@ -31,6 +31,53 @@ def fixture(unknown=('Ribbon',), regions=('tops', 'face', 'hair', None), parents
     return inventory, fit_plan
 
 
+def foreign_inventory(extra_hair=False):
+    # Names say nothing (SWSkull ...): only geometry shows that the skull is the head.
+    rows=[mesh('SWChest','tops'),mesh('SWLeg','tops'),mesh('SWSkull','tops')]
+    rows[0].update(min_z_m=1.0,max_z_m=1.7);rows[1].update(min_z_m=0.3,max_z_m=1.1)
+    rows[2].update(min_z_m=1.61,max_z_m=1.8)
+    if extra_hair:
+        rows.append(mesh('SWHair','hair'));rows[3].update(min_z_m=1.65,max_z_m=1.9)
+    inventory={'meshes':rows,'neck_z_m':1.61,'ground_alignment':{'measured_correction_m':0.0},
+               'foot_alignment':[],'unknown_weight_groups':[],'source_bone_parents':{}}
+    fit_plan={'matched_roles':[{'role':'hips','source_bone':'Hips','target_bone':'ketu_c_n'}],
+              'accessory_parent_hints':[]}
+    return inventory,fit_plan
+
+
+class ForeignAvatarTests(unittest.TestCase):
+    def test_single_gmd_target_needs_no_separate_face_or_hair(self):
+        inventory,fit_plan=foreign_inventory()
+        with tempfile.TemporaryDirectory() as temp:
+            result=create_deterministic(inventory,fit_plan,Path(temp)/'p.json',
+                                        slots=[('tops','face','hair')])
+        self.assertEqual(set(result['mesh_regions'].values())<={'tops','face','hair'},True)
+
+    def test_unlabelled_head_is_found_by_geometry_for_multi_gmd_targets(self):
+        inventory,fit_plan=foreign_inventory(extra_hair=True)
+        with tempfile.TemporaryDirectory() as temp:
+            result=create_deterministic(inventory,fit_plan,Path(temp)/'p.json',
+                                        slots=[('tops',),('face',),('hair',)])
+        self.assertEqual(result['mesh_regions']['SWSkull'],'face')
+        self.assertEqual(result['mesh_regions']['SWChest'],'tops')
+        self.assertEqual(result['coverage_adjustments'][0]['reason'],
+                         'geometry fallback: mesh lies entirely above the neck')
+
+    def test_hairless_avatar_on_a_hair_gmd_target_stops_with_a_clear_reason(self):
+        inventory,fit_plan=foreign_inventory()
+        with tempfile.TemporaryDirectory() as temp, self.assertRaises(LocalProfileError) as ctx:
+            create_deterministic(inventory,fit_plan,Path(temp)/'p.json',
+                                 slots=[('tops',),('face',),('hair',)])
+        self.assertIn('hair',str(ctx.exception))
+
+    def test_kuwana_style_face_hair_slot_is_filled_by_either(self):
+        inventory,fit_plan=foreign_inventory()
+        with tempfile.TemporaryDirectory() as temp:
+            result=create_deterministic(inventory,fit_plan,Path(temp)/'p.json',
+                                        slots=[('tops',),('face','hair')])
+        self.assertEqual(result['mesh_regions']['SWSkull'],'face')
+
+
 class DeterministicProfileTests(unittest.TestCase):
     def test_regions_follow_inventory_and_ambiguous_becomes_tops(self):
         inventory, fit_plan = fixture()
@@ -54,7 +101,7 @@ class DeterministicProfileTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp:
             with self.assertRaises(LocalProfileError) as ctx:
                 create_deterministic(inventory, fit_plan, Path(temp) / 'p.json')
-            self.assertIn('詳細モード', str(ctx.exception))
+            self.assertIn('detailed mode', str(ctx.exception))
             self.assertFalse((Path(temp) / 'p.json').exists())
 
     def test_inventory_without_parents_only_fails_when_a_group_needs_them(self):
@@ -72,7 +119,7 @@ class DeterministicProfileTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp:
             with self.assertRaises(LocalProfileError) as ctx:
                 create_deterministic(inventory, fit_plan, Path(temp) / 'p.json')
-            self.assertIn('詳細モード', str(ctx.exception))
+            self.assertIn('detailed mode', str(ctx.exception))
 
     def test_simple_mode_never_touches_the_local_ai(self):
         inventory, fit_plan = fixture()

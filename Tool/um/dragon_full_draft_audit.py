@@ -14,7 +14,7 @@ from mathutils import Vector, kdtree
 
 sys.path.insert(0,str(Path(__file__).resolve().parent))
 from dragon_geometry_fit import bounded_offsets, weighted_bone_offsets
-from dragon_anatomical_fit import fit_points
+from dragon_anatomical_fit import alias_weights, fit_points
 
 
 def addon(folder):
@@ -84,6 +84,7 @@ def audit(job):
         if job.get('anatomical_fit'):
             names=[g.name for g in original.vertex_groups]
             weights=[{names[w.group]:w.weight for w in v.groups} for v in original.data.vertices]
+            weights=alias_weights(weights,job['anatomical_fit'],job['matched_roles'],job.get('accessory_parent_hints',[]))
             a=[Vector(p) for p in fit_points([list(p) for p in a],weights,job['anatomical_fit'])]
         foot_targets=job.get('foot_fit_targets',[])
         if foot_targets:

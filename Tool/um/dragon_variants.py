@@ -138,7 +138,7 @@ def availability(base, private_data=None, source_root=None):
                     hashes_match = False
         ready = present and (key == base or key in good and hashes_match)
         rows.append({'id':key, 'ready':ready,
-                     'reason':'' if ready else '参照未検証・strict往復失敗・不足・ハッシュ不一致'})
+                     'reason':'' if ready else 'Reference unverified, strict round trip failed, missing, or hash mismatch'})
     return rows
 
 
@@ -186,7 +186,7 @@ def run_batch(vrm, references, blender, addon, action_blend, baseline_report,
     preparation_cache = {}  # measured, in-memory, scoped to this VRM batch only
     try:
         for index, key in enumerate(keys):
-            progress(f'モデル切替候補 {index+1}/{len(keys)}: {key}')
+            progress(f'Model switch candidate {index+1}/{len(keys)}: {key}')
             refs = references if key == target_id else target_references(
                 key, bundle/'PrivateData' if source_root is None else None, source_root=source_root)
             # A user-selected base reference cannot silently redefine a shared slot.
@@ -205,7 +205,7 @@ def run_batch(vrm, references, blender, addon, action_blend, baseline_report,
                 if key == target_id:
                     raise
                 report['failed_variants'].append({'id': key, 'error': str(exc)})
-                progress(f'切替候補 {key} は変換できませんでした（他は続行）: {exc}')
+                progress(f'Switch candidate {key} could not be converted (continuing with the others): {exc}')
                 save()
                 continue
             mod = Path(result['mod_folder'])

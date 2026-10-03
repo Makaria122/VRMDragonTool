@@ -24,6 +24,21 @@ An experimental tool that generates VRM replacement mods for Lost Judgment. It d
 
 In-game appearance, native motion and every model switch are not guaranteed. Do not treat a failed or skipped motion check as a pass.
 
+## Requirements
+
+- **Windows 10/11** (tested on Windows 11), **Python 3.10+ with Tkinter**, **Pillow**, and **Blender 4.5 LTS** (portable ZIP is fine; not bundled). The GMD add-on is bundled.
+- A **Chara folder you extracted yourself** from your own copy of Lost Judgment (extraction is not covered here) and a humanoid **VRM** you may use.
+- About 1 GB for Blender plus roughly 0.2 GB of working files per converted model. The optional detailed mode (local AI) adds about 6 GB.
+
+## Install and run
+
+1. Download this repository (`git clone https://github.com/Makaria122/VRMDragonTool.git` or "Code → Download ZIP") into a normal folder.
+2. Install Python 3.10+ from python.org (tick "Add python.exe to PATH" and keep "tcl/tk and IDLE"), then run `python -m pip install --target Tool/runtime/python-packages -r Tool/requirements.txt` in the tool folder.
+3. Extract Blender 4.5 LTS so that the executable is at `Blender/blender.exe` next to `Start-Tool.cmd`.
+4. Double-click `Start-Tool.cmd`. In the window: pick your extracted Chara folder, choose the target character, pick your VRM, then press "Create mod pack from VRM automatically". The finished mod folder opens when it is done; copy it into your mod manager yourself (the tool never installs anything).
+
+Full instructions, troubleshooting and the optional local-AI mode are in [Tool/README.md](Tool/README.md).
+
 ## Before publishing
 
 `python Tool/export_public.py --output PublicRelease` creates a distribution folder with private data excluded. Do not upload your whole working folder.

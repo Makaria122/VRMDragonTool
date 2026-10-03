@@ -5,7 +5,7 @@ import json
 import os
 import re
 import subprocess
-from um.dragon_log import run_logged
+from um.dragon_log import failure_summary, run_logged
 import tempfile
 from datetime import datetime
 from pathlib import Path
@@ -45,8 +45,7 @@ def _blender(blender: Path, scene: Path, script: str, args: list[Path], progress
     except subprocess.TimeoutExpired as exc:
         raise LocalProfileError(f'{script} timed out after 360 seconds') from exc
     if result.returncode or not args[-1].is_file():
-        lines=(result.stderr+'\n'+result.stdout).splitlines()
-        raise LocalProfileError(f'{script} failed: {chr(10).join(lines[-14:])[-2400:]}')
+        raise LocalProfileError(f'{script} failed: {failure_summary(result.stdout,result.stderr)}')
 
 
 def create_avatar_profile(vrm: str | Path, references: dict[str,str | Path],

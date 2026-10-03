@@ -131,6 +131,23 @@ class LogTests(unittest.TestCase):
         self.assertTrue((self.dir / 'keep.txt').is_file())
         self.assertFalse((self.dir / log.LOG_NAME).exists())
 
+    def test_failure_summary_prefers_the_error_lines_over_noise(self):
+        output = chr(10).join([
+            'Error: Python: Traceback (most recent call last):',
+            '  File "importer.py", line 3, in load',
+            'OSError: load: x/yakuza_shader.blend failed to open blend file',
+            '<Vector (0.0000, 0.0000, 0.0000, 1.0000)>	<Vector (1.0000, 1.0000, 1.0000, 0.0000)>',
+            'Blender quit'])
+        text = log.failure_summary(output, '')
+        self.assertIn('failed to open blend file', text)
+        self.assertNotIn('Vector', text)
+        self.assertNotIn('File "importer.py"', text)
+
+    def test_failure_summary_falls_back_to_the_last_lines_and_is_capped(self):
+        quiet = chr(10).join(f'line {i}' for i in range(40))
+        self.assertTrue(log.failure_summary(quiet, '').endswith('line 39'))
+        self.assertLessEqual(len(log.failure_summary('Error: ' + 'x' * 5000, '')), 1500)
+
     def test_fingerprint_changes_with_the_source(self):
         root = Path(self.temp.name) / 'tree'
         (root / 'Tool' / 'um').mkdir(parents=True)

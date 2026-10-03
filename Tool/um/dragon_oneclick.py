@@ -12,7 +12,7 @@ import json
 import re
 import shutil
 import subprocess
-from um.dragon_log import run_logged
+from um.dragon_log import failure_summary, run_logged
 from pathlib import Path
 from typing import Callable
 
@@ -36,8 +36,7 @@ def _blender(blender: Path, scene: Path, script: str, arguments: list[Path], pro
     except subprocess.TimeoutExpired as exc:
         raise OneClickError(f'{script}: timed out after 360 seconds') from exc
     if proc.returncode or not arguments[-1].is_file():
-        detail='\n'.join((proc.stderr+'\n'+proc.stdout).splitlines()[-22:])
-        raise OneClickError(f'{script} failed: {detail[-3500:]}')
+        raise OneClickError(f'{script} failed: {failure_summary(proc.stdout,proc.stderr)}')
 
 
 DUMMY_SOURCES={'texture_multi':'dummy_multi.dds','texture_normal':'dummy_nmap.dds',

@@ -39,6 +39,10 @@ In-game appearance, native motion and every model switch are not guaranteed. Do 
 
 Full instructions, troubleshooting and the optional local-AI mode are in [Tool/README.md](Tool/README.md).
 
+## Credits
+
+- GMD reading/writing is done by the bundled Blender add-on `yakuza-gmd-gmt-blender` (GPL v3), which builds on [yk_gmd_io](https://github.com/theturboturnip/yk_gmd_io) by Samuel Stark (TheTurboTurnip) and [yakuza-gmt-blender](https://github.com/mosamadeeb/yakuza-gmt-blender) by mosamadeeb. Thank you to their authors. Details and licenses: [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+
 ## Before publishing
 
 `python Tool/export_public.py --output PublicRelease` creates a distribution folder with private data excluded. Do not upload your whole working folder.

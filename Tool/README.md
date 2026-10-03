@@ -13,7 +13,7 @@ Generates review-only replacement mod candidates from a VRM, using GMD files tha
 | Python | **3.10 or newer, with Tkinter** (tested with 3.10). With the python.org installer keep "tcl/tk and IDLE" ticked. |
 | Pillow | 10 to 12 (`Tool/requirements.txt`) |
 | Blender | **4.5 LTS** (tested with 4.5.14). The portable ZIP is enough; it is not bundled. |
-| GMD add-on | Bundled in `Tool/vendor/yakuza-gmd-gmt-blender` (GPL, separate license). Nothing to install in Blender. |
+| GMD add-on | Bundled in `Tool/vendor/yakuza-gmd-gmt-blender` (GPL v3, separate license; built on the work of TheTurboTurnip and mosamadeeb, see `THIRD_PARTY_NOTICES.md`). Nothing to install in Blender. |
 | Your game data | A **Chara folder you extracted yourself** from your own copy of Lost Judgment. This project does not explain or provide extraction. The game does not have to be running or even installed to convert; it is only needed to try the result. |
 | A VRM | A humanoid VRM you are allowed to use. It is read through Blender's glTF importer. |
 | Disk space | Blender is about 1 GB. Each converted model keeps about 0.2 GB of working files in `Tool/userdata/outputs` (a full switch-target batch can reach several GB; clean up in the "Storage" tab). The detailed mode (local AI) adds about 1.8 GB for Ollama and about 4.4 GB for the model. |

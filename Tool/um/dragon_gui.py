@@ -11,7 +11,11 @@ import tkinter as tk
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 
+from um import dragon_log
 from um.dragon import inspect, inspect_blender, roundtrip_gmd
+
+
+LOG_HINT = 'Details were saved to the log. Open the Logs tab and create a debug report to share.'
 
 
 class DragonWindow:
@@ -191,6 +195,19 @@ class DragonWindow:
                               ('Delete selected folders...',self.storage_delete_folders),
                               ('Open outputs folder',self.storage_open)):
             button=ttk.Button(storage_row,text=label,command=command);button.pack(side='left',padx=(0,6));self.storage_buttons.append(button)
+        logs_tab=ttk.Frame(self.notebook,padding=14);self.notebook.add(logs_tab,text='Logs')
+        ttk.Label(logs_tab,text='Logs and debug report',font=('Segoe UI',14,'bold')).pack(anchor='w')
+        ttk.Label(logs_tab,text='The tool keeps a log of what it does, including the full output of Blender when a step fails, '
+                  'in Tool/userdata/logs (capped at about 12 MB, never uploaded). If something goes wrong, press "Create debug report" '
+                  'and attach the file to your bug report. User names and home-folder paths are masked, but file names, avatar names '
+                  'and error text are not: read the report before you post it.',wraplength=700).pack(anchor='w',pady=(4,8))
+        self.logs_status=tk.StringVar(value='')
+        ttk.Label(logs_tab,textvariable=self.logs_status,wraplength=700).pack(anchor='w',pady=6)
+        logs_row=ttk.Frame(logs_tab);logs_row.pack(fill='x')
+        for label,command in (('Create debug report',self.logs_report),('Open logs folder',self.logs_open),
+                              ('Delete all logs',self.logs_delete)):
+            ttk.Button(logs_row,text=label,command=command).pack(side='left',padx=(0,6))
+        self.logs_refresh()
         self.root.protocol('WM_DELETE_WINDOW',self.close)
         if self.source_root.get():
             self.select_target()
@@ -265,7 +282,9 @@ class DragonWindow:
                 progress=lambda item:self.ai_queue.put(('progress',item))
                 result=runtime.setup(progress,install=True) if operation=='setup' else runtime.download_model(progress)
                 self.ai_queue.put(('ok',result))
-            except Exception as exc:self.ai_queue.put(('error',str(exc)))
+            except Exception as exc:
+                dragon_log.log_exception('AI setup failed', exc)
+                self.ai_queue.put(('error',str(exc)))
         threading.Thread(target=worker,daemon=True).start();self.root.after(100,self.poll_ai)
 
     def poll_ai(self):
@@ -279,6 +298,33 @@ class DragonWindow:
         for b in self.ai_buttons:b.configure(state='normal')
         self.ai_status.set(str(data))
         if kind=='error':messagebox.showerror('AI setup',str(data))
+
+    def logs_refresh(self):
+        size=dragon_log.log_files_size()
+        self.logs_status.set(f'Log folder: {dragon_log.redact(str(dragon_log.log_dir()))}  ({size/1024:.0f} KB in use)')
+
+    def logs_report(self):
+        try:
+            dragon_log.get_logger().info('debug report requested')
+            path=dragon_log.create_debug_report(outputs=self.private_output_parent)
+        except Exception as exc:
+            dragon_log.log_exception('Debug report failed',exc);messagebox.showerror('Logs',str(exc));return
+        self.logs_status.set(f'Debug report saved: {path.name}')
+        messagebox.showinfo('Debug report',f'Saved {path.name} in the logs folder.'+chr(10)+'It masks user names and home-folder paths, '
+                            'but not file names, avatar names or error text. Read it before sharing.')
+        self.logs_open()
+
+    def logs_open(self):
+        folder=dragon_log.log_dir();folder.mkdir(parents=True,exist_ok=True)
+        if os.name=='nt':
+            os.startfile(str(folder))
+
+    def logs_delete(self):
+        if not messagebox.askokcancel('Delete all logs','Delete all log files and debug reports? This cannot be undone.'):return
+        count=dragon_log.delete_logs()
+        dragon_log.setup_logging()  # logging continues in a fresh file
+        self.logs_status.set(f'Deleted {count} file(s).')
+        self.logs_refresh()
 
     def storage_busy(self):
         if self.oneclick_button.instate(['disabled']) or getattr(self,'ai_busy',False):
@@ -403,6 +449,7 @@ class DragonWindow:
                     target_id=target_id,profile_mode=profile_mode)
                 self.messages.put(('ok',result))
             except Exception as exc:
+                dragon_log.log_exception('Task failed', exc)
                 self.messages.put(('error',str(exc)))
         threading.Thread(target=worker,daemon=True).start()
         self.root.after(80,self.poll)
@@ -458,6 +505,7 @@ class DragonWindow:
                            **({'source_root':source_root} if use_variants else {}))
                 self.messages.put(('ok',report))
             except Exception as exc:
+                dragon_log.log_exception('Task failed', exc)
                 self.messages.put(('error',str(exc)))
         threading.Thread(target=worker,daemon=True).start()
         self.root.after(80,self.poll)
@@ -505,7 +553,8 @@ class DragonWindow:
                                progress=lambda text: self.messages.put(('progress', text)))
                 self.messages.put(('ok', result))
             except (OSError, ValueError, KeyError) as exc:
-                self.messages.put(('error', str(exc)))
+                dragon_log.log_exception('Task failed', exc)
+                self.messages.put(('error',str(exc)))
         threading.Thread(target=worker, daemon=True).start()
         self.root.after(80, self.poll)
 
@@ -543,6 +592,7 @@ class DragonWindow:
                 result=combine_mod_folders(sources,output,title)
                 self.messages.put(('ok',result))
             except Exception as exc:
+                dragon_log.log_exception('Task failed', exc)
                 self.messages.put(('error',str(exc)))
         threading.Thread(target=worker,daemon=True).start()
         self.root.after(80,self.poll)
@@ -563,7 +613,8 @@ class DragonWindow:
                 from um.dragon_candidate import check_draft
                 self.messages.put(("ok", check_draft(folder)))
             except (OSError, ValueError) as exc:
-                self.messages.put(("error", str(exc)))
+                dragon_log.log_exception('Task failed', exc)
+                self.messages.put(("error",str(exc)))
         threading.Thread(target=worker, daemon=True).start()
         self.root.after(80, self.poll)
 
@@ -644,7 +695,8 @@ class DragonWindow:
                                      values["hair"] or None)
                 self.messages.put(("ok", result))
             except (ValueError, OSError, ImportError) as exc:
-                self.messages.put(("error", str(exc)))
+                dragon_log.log_exception('Task failed', exc)
+                self.messages.put(("error",str(exc)))
         threading.Thread(target=worker, daemon=True).start()
         self.root.after(80, self.poll)
 
@@ -655,6 +707,7 @@ class DragonWindow:
             self.root.after(80, self.poll)
             return
         if kind == 'progress':
+            dragon_log.get_logger().info('progress: %s', result)
             self.status.set(result)
             if getattr(self,'profile_running',False):
                 self.profile_status.set(result)
@@ -674,7 +727,7 @@ class DragonWindow:
         if kind == "error":
             self.profile_status.set(f'Profile creation error: {result}')
             self.status.set(f"Stopped: {result}")
-            messagebox.showerror("Processing error", result)
+            messagebox.showerror("Processing error", str(result) + chr(10) + chr(10) + LOG_HINT)
             return
         self.report = result
         self.save_button.configure(state="normal")
@@ -733,6 +786,10 @@ class DragonWindow:
 
 
 def main():
+    dragon_log.setup_logging()
+    dragon_log.log_environment()
     root = tk.Tk()
+    root.report_callback_exception = lambda kind, value, trace: dragon_log.get_logger().error(
+        'Uncaught error in a GUI callback', exc_info=(kind, value, trace))
     DragonWindow(root)
     root.mainloop()

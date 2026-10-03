@@ -5,6 +5,7 @@ import json
 import os
 import re
 import subprocess
+from um.dragon_log import run_logged
 import tempfile
 from datetime import datetime
 from pathlib import Path
@@ -40,7 +41,7 @@ def _blender(blender: Path, scene: Path, script: str, args: list[Path], progress
     command=[str(blender),'--background','--factory-startup','--python-exit-code','1',str(scene),
              '--python',str(Path(__file__).with_name(script)),'--',*(str(x) for x in args)]
     try:
-        result=subprocess.run(command,capture_output=True,text=True,errors='replace',timeout=360)
+        result=run_logged(command,f'blender {script}',360)
     except subprocess.TimeoutExpired as exc:
         raise LocalProfileError(f'{script} timed out after 360 seconds') from exc
     if result.returncode or not args[-1].is_file():

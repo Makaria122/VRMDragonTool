@@ -14,6 +14,7 @@ import tempfile
 from pathlib import Path
 
 from um.dragon_fit import fit_plan
+from um.dragon_log import run_logged
 from um.dragon_beta import portable_data_path
 
 MAX_JSON = 64 * 1024 * 1024
@@ -205,7 +206,7 @@ def inspect_blender(vrm: str | Path, tops: str | Path, blender: str | Path,
         command = [str(blender), "--background", "--factory-startup", "--python-exit-code", "1",
                    "--python", str(worker), "--", str(source), str(target)]
         try:
-            proc = subprocess.run(command, capture_output=True, text=True, errors="replace", timeout=timeout)
+            proc = run_logged(command, "blender inspection", timeout)
         except subprocess.TimeoutExpired as exc:
             raise InspectionError(f"Blender inspection timed out after {timeout}s") from exc
         if proc.returncode or not target.is_file():
@@ -278,7 +279,7 @@ def roundtrip_gmd(source: str | Path, blender: str | Path, addon: str | Path,
         command = [str(blender), "--background", "--factory-startup", "--python-exit-code", "1",
                    "--python", str(worker), "--", str(job), str(result_path)]
         try:
-            proc = subprocess.run(command, capture_output=True, text=True, errors="replace", timeout=timeout)
+            proc = run_logged(command, "blender gmd roundtrip", timeout)
         except subprocess.TimeoutExpired as exc:
             raise InspectionError(f"Blender timed out; private working copy remains at {output}") from exc
         if proc.returncode or not result_path.is_file():

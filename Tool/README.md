@@ -55,6 +55,12 @@ If you provide a motion Action `.blend`, each model is compared against its orig
 - The matte policy is kept: eye-surround decal materials are not reused on clothing or body. A strict-export success does not mean hair transparency, lighting, expressions, bone sway or native motion pass.
 - Enabling several mods for the same replacement target of the same character conflicts. The multi-mod merge refuses same-named paths with different content.
 
+## Reporting a problem
+
+If a conversion fails or looks wrong, open the "Logs" tab and press "Create debug report", then attach the generated `debug-report-*.txt` (in `Tool/userdata/logs`) to your issue together with the avatar's name or where it came from. The report holds the tool version fingerprint, Python/OS/Blender information, the most recent failed runs and the newest log, including the full Blender output of the failing step.
+
+Logs are kept on your machine only (about 12 MB at most). User names and home-folder paths are masked, but file names, avatar names and error text are not, so read the report before you post it. Do not attach your VRM, GMD or generated mod files.
+
 ## Building the public source
 
 Do not upload the whole repository root as is.

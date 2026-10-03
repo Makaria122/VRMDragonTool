@@ -10,6 +10,7 @@ import hashlib
 import json
 import shutil
 import subprocess
+from um.dragon_log import run_logged
 from pathlib import Path
 from typing import Callable
 
@@ -62,7 +63,7 @@ def _run(blender: Path, script: Path, arguments: list[Path], progress: Callable[
     command = [str(blender), '--background', '--factory-startup', '--python-exit-code', '1',
                '--python', str(script), '--', *(str(path) for path in arguments)]
     try:
-        done = subprocess.run(command, capture_output=True, text=True, errors='replace', timeout=360)
+        done = run_logged(command, f'blender {label}', 360)
     except subprocess.TimeoutExpired as exc:
         raise BetaError(f'{label} timed out after 360 seconds') from exc
     if done.returncode or not arguments[-1].is_file():

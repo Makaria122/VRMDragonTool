@@ -1,5 +1,9 @@
 # Changes
 
+## Log files and debug report
+- The tool now writes a log to `Tool/userdata/logs/vrmdragon.log` (rotating, about 12 MB at most): environment information at start-up, progress messages, error tracebacks, uncaught GUI errors, and for every Blender step the command line plus its exit code; when a step fails the full Blender output (clipped to 100 KB) is kept, where the error dialog only shows the tail. User names and home-folder paths are masked as lines are written. Logging never raises into the application.
+- New "Logs" tab: "Create debug report" writes a redacted text file (environment, tool fingerprint, recent failed runs, newest log) to share in a bug report; "Open logs folder"; "Delete all logs". Error dialogs point to it. Logs stay on the machine and are never uploaded.
+
 ## Storage tab: clean up generated outputs
 - New "Storage" tab lists the folders in `Tool/userdata/outputs` with their size and how much of it is working `.blend` files, and can delete selected folders or only their working `.blend` files (generated mods, reports and textures are kept). A confirmation shows the amount first.
 - Safety: only direct child folders of `Tool/userdata/outputs` can be deleted; links and junctions are never followed or removed, path tricks such as `..` are rejected, nothing is deleted while a conversion is running, and failures are reported per folder.

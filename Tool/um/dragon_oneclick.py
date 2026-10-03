@@ -12,6 +12,7 @@ import json
 import re
 import shutil
 import subprocess
+from um.dragon_log import run_logged
 from pathlib import Path
 from typing import Callable
 
@@ -31,7 +32,7 @@ def _blender(blender: Path, scene: Path, script: str, arguments: list[Path], pro
     cmd=[str(blender),'--background','--factory-startup','--python-exit-code','1',str(scene),
          '--python',str(target),'--',*(str(v) for v in arguments)]
     try:
-        proc=subprocess.run(cmd,capture_output=True,text=True,errors='replace',timeout=360)
+        proc=run_logged(cmd,f'blender {script}',360)
     except subprocess.TimeoutExpired as exc:
         raise OneClickError(f'{script}: timed out after 360 seconds') from exc
     if proc.returncode or not arguments[-1].is_file():

@@ -1,4 +1,4 @@
-# VRMDragonTool (Only Lost Judgment is supported for now.)
+# VRMDragonTool (Experimental: any Dragon Engine game, tested with Lost Judgment and Like a Dragon 8)
 
 > [!WARNING]
 > # WORK IN PROGRESS (WIP): UNSTABLE
@@ -13,7 +13,7 @@
 > - **Most characters and outfits are experimental.** Seated, young-era and dead-state models and unusual poses (for example avatars with hanging arms) have only been checked up to the export round trip.
 > - **The detailed mode (local AI) has not been tested on a clean machine**, and the GUI, options and file formats may change without notice.
 
-An experimental tool that generates VRM replacement mods for Lost Judgment. It does not install anything into the game and does not extract game data. Each user supplies the Chara folder extracted from a game they own, and a VRM they have the right to use.
+An experimental tool that generates VRM replacement mods for Dragon Engine games (Lost Judgment characters are built in; for other games you add the GMD files you extracted yourself). It does not install anything into the game and does not extract game data. Each user supplies the Chara folder extracted from a game they own, and a VRM they have the right to use.
 
 **For setup, usage and limitations, see [Tool/README.md](Tool/README.md).**
 
@@ -27,7 +27,7 @@ In-game appearance, native motion and every model switch are not guaranteed. Do 
 ## Requirements
 
 - **Windows 10/11** (tested on Windows 11), **Python 3.10+ with Tkinter**, **Pillow**, and **Blender 4.5 LTS** (not bundled: the tool offers to download the official build on first start, or you can use your own). The GMD add-on is bundled.
-- A **Chara folder you extracted yourself** from your own copy of Lost Judgment (extraction is not covered here) and a humanoid **VRM** you may use.
+- A **Chara folder you extracted yourself** from your own copy of the game (extraction is not covered here) and a humanoid **VRM** you may use.
 - About 1 GB for Blender plus roughly 0.2 GB of working files per converted model. The optional detailed mode (local AI) adds about 6 GB.
 
 ## Install and run

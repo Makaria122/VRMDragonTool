@@ -112,7 +112,8 @@ def build(profile_file: str | Path, vrm_file: str | Path, output_folder: str | P
         _private(original, bundle)
         if original.suffix.lower() != '.gmd' or original.name != slot.stem + '.gmd':
             raise BetaError(f'Unexpected private {region} original GMD for {target.label}')
-        if job.get('target_bone_count', target.bone_count) != target.bone_count:
+        expected_count = (target.slot_bone_counts or {}).get(region, target.bone_count)
+        if job.get('target_bone_count', expected_count) != expected_count:
             raise BetaError(f'Wrong target rig size in {region} job')
         for entry in job['meshes']:
             preview = Path(entry['blend']).resolve(strict=True)
@@ -120,8 +121,9 @@ def build(profile_file: str | Path, vrm_file: str | Path, output_folder: str | P
             inputs.append(preview)
         jobs[region] = job
         inputs.append(original)
-    texmap = _json(Path(jobs['tops']['texture_map']).resolve(strict=True))
-    dds = Path(jobs['tops']['dds_dir']).resolve(strict=True)
+    first_job = next(iter(jobs.values()))  # a variant may export only one slot, not necessarily tops
+    texmap = _json(Path(first_job['texture_map']).resolve(strict=True))
+    dds = Path(first_job['dds_dir']).resolve(strict=True)
     _private(dds, bundle)
     textures = []
     for image in texmap['images']:
@@ -177,7 +179,7 @@ def build(profile_file: str | Path, vrm_file: str | Path, output_folder: str | P
             job['working_copy'] = str(target_gmd)
             job['addon'] = str(addon)
             job['dds_dir'] = str(private_dds)
-            job['target_bone_count'] = target.bone_count
+            job['target_bone_count'] = (target.slot_bone_counts or {}).get(region, target.bone_count)
             job['mesh_offsets'] = offsets.get(region, {})
             (output / f'{region}_job.json').write_text(json.dumps(job, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
             _run(blender, Path(__file__).with_name('dragon_full_draft_worker.py'),

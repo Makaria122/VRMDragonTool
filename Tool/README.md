@@ -102,13 +102,28 @@ If you provide a motion Action `.blend`, each model is compared against its orig
 
 ## Characters from other Dragon Engine games (custom targets)
 
-Besides the registered Lost Judgment characters you can add your own: choose **"Other (add your own GMD files)..."** in the target list.
+Besides the registered Lost Judgment characters you can add your own: choose **"Other (add your own GMD files)..."** in the target list. There are two ways:
 
-1. Pick the body GMD (`tops`) of a character from a game you extracted yourself. If the face and hair GMDs sit next to it in the usual layout (`.../tops/<id>/<id>.gmd`, `.../face/...`, `.../hair/...`) they are found automatically and you are asked whether to add them; you can also pick them by hand or leave them out (then everything goes into the one body GMD).
-2. The tool reads the files once with Blender (read-only), checks that the skeleton has the bones its fitting needs (the Dragon Engine bone names such as `ketu_c_n`, `kubi_c_n`, `ude1_l_n`, `asi3_l_n`; finger bones are optional) and that all files share one skeleton, then keeps **private copies** in `Tool/userdata/targets/`. The original files, even inside a game folder, are never changed and are not used again afterwards.
-3. The new target appears in the list and works like the built-in ones (profile creation, fitting, strict export check, Mods-format output). The output keeps the game's layout: `chara/<tops|face|hair>/<name>/<name>.gmd`. "Remove custom target" deletes the copies.
+### Whole character (recommended)
 
-Notes and limits: switch targets (outfit/event variants) are not available for custom targets; a skeleton with different bone names is refused with the list of missing bones; materials and shaders of other games may differ, so in-game results are unverified. The author tested this with the Like a Dragon 8 character Ichiban (297-bone skeleton): the conversion runs to the end and the model sits correctly on the skeleton in Blender, but it has not been checked in the game.
+A character usually has many parts (outfits, hair styles, faces). This replaces all of them at once, so no scene falls back to the original model.
+
+1. Choose the folder with the files you extracted (any folder; it is searched recursively, and it may even be inside a game folder because it is only read) and type the character name, for example `ichiban`.
+2. The tool lists every GMD whose file name contains the name, split into body (tops), face and hair, and reads them all with Blender (read-only). Each file is checked for the skeleton the fitting needs. The plainest name of each kind becomes the **base set** (always added); every other usable file is an **extra part**.
+3. Models that should not simply be replaced are **unticked by default**: undressed (`naked`, `nude`), swimwear, dead, other age, test and special-pose models, and files that cannot be read or have another skeleton. Click `[ ]` / `[x]` to change it, then press "Add this character". Private copies of the ticked files are stored in `Tool/userdata/targets/`.
+4. Pick the character in the target list and convert as usual. With the switch-target checkbox on, **every part is converted** (only that part's file is exported, a few Blender jobs run in parallel, working `.blend` files are deleted as it goes) and everything ends up in one Mods-format folder; with it off only the base set is converted. "Parallel Blender jobs" (default 3) sets how many run at once.
+
+### Single GMD files
+
+Pick one body GMD (face and hair next to it in the usual `.../tops/<id>/<id>.gmd`, `.../face/...`, `.../hair/...` layout are found automatically and you are asked whether to add them) or choose the files by hand. Without face/hair everything goes into the one body GMD.
+
+### How it works, and limits
+
+- The tool reads the files once with Blender (read-only), checks that the skeleton has the bones its fitting needs (the Dragon Engine bone names such as `ketu_c_n`, `kubi_c_n`, `ude1_l_n`, `asi3_l_n`; finger bones are optional), then keeps **private copies** in `Tool/userdata/targets/` (SHA-256 checked on every use). The original files, even inside a game folder, are never changed and are not used again afterwards.
+- The output keeps the game's layout: `chara/<tops|face|hair>/<name>/<name>.gmd`. Parts with a different bone count (extra cloth bones) are converted with their own bone count. "Remove custom target" deletes the copies.
+- A skeleton with different bone names is refused with the list of missing bones. Materials and shaders of other games may differ, so in-game results are unverified.
+- A body model without feet (for example a hands-only first-person model) is refused when you add the character, because the floor cannot be measured and it could not replace a full body.
+- The author tried this with Like a Dragon 8 (Ichiban, 62 matching files, 42 ticked by default): all 40 outfits/hair styles/faces converted in about 7 minutes with 3 parallel jobs (16-core PC), and the batch folder stays around 160 MB because intermediate files are deleted as it goes. The GMDs sit correctly on the skeleton in Blender; nothing has been checked in the game.
 
 ## Reporting a problem
 

@@ -26,6 +26,11 @@ class Target:
     # Only for user-defined ("Other") targets: the private copies of the GMDs and their SHA-256.
     custom_references: dict | None = None
     custom_hashes: dict | None = None
+    # Only for a custom character group: its extra parts (other outfits/hair/faces), each a dict with
+    # role, stem, bone_count and the path of the private copy.
+    custom_parts: tuple | None = None
+    # Bone count of the GMD of a slot when it differs from `bone_count` (the tops skeleton).
+    slot_bone_counts: dict | None = None
 
 
 _TARGETS = {

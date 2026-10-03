@@ -7,7 +7,9 @@ reference; no differing-reference collision is silently overwritten.
 from __future__ import annotations
 import hashlib
 import json
+import os
 import shutil
+import stat
 from pathlib import Path
 
 # Reviewed layouts plus explicitly approved Sawa age/dead/sitting and Kuwana 30 exceptions.
@@ -56,6 +58,13 @@ SINGLE_GMD_VARIANTS = frozenset({'kuwana__30'})
 
 def variant_target(key):
     from um.dragon_targets import Target, ExportSlot, get_target
+    if key.startswith('custom_'):
+        from um import dragon_custom_targets as custom
+        base_id, _, stem = key.partition('__')
+        try:
+            return custom.part_variant_target(base_id, stem)
+        except custom.CustomTargetError as exc:
+            raise ValueError(str(exc)) from exc
     row = next((r for r in ROWS if r[0] + '__' + r[1] == key), None)
     if row is None:
         raise ValueError(f'Unsupported variant: {key}')
@@ -87,7 +96,9 @@ def variant_target(key):
 
 def variants_for(base):
     from um.dragon_targets import get_target
-    get_target(base)
+    spec = get_target(base)
+    if spec.custom_parts:  # a registered character group: every extra part is one variant
+        return [base] + [f"{base}__{part['stem']}" for part in spec.custom_parts]
     return [base] + [r[0] + '__' + r[1] for r in ROWS if r[0] == base]
 
 
@@ -108,6 +119,9 @@ def replacement_ownership(keys):
 
 def availability(base, private_data=None, source_root=None):
     from um.dragon_targets import target_references, get_target
+    if get_target(base).custom_references is not None:
+        return [{'id': key, 'ready': all(Path(p).is_file() for p in get_target(key).custom_references.values()),
+                 'reason': '', 'found': True, 'validated': False} for key in variants_for(base)]
     if source_root is not None:
         from um.dragon_asset_catalog import available_references
         rows = []
@@ -146,9 +160,32 @@ def availability(base, private_data=None, source_root=None):
     return rows
 
 
+def _drop_working_blends(folder):
+    """Delete the large working .blend files of one run (the generated mod does not need them)."""
+    for pattern in ('*.blend', '*.blend1'):
+        for file in Path(folder).rglob(pattern):
+            try:
+                if file.is_file() and not file.is_symlink():
+                    file.chmod(0o666)
+                    file.unlink()
+            except OSError:
+                pass
+
+
+def _drop_run_outputs(folder):
+    """Delete the bulky intermediate folders of one finished run (textures and the candidate/review copies)."""
+    def writable(function, path, _info):
+        os.chmod(path, stat.S_IWRITE)
+        function(path)
+    for name in ('textures', 'Candidate', 'ReviewPack', 'neutral_maps'):
+        target = Path(folder) / name
+        if target.is_dir() and not target.is_symlink():
+            shutil.rmtree(target, onerror=writable)
+
+
 def run_batch(vrm, references, blender, addon, action_blend, baseline_report,
               output, dummy_texture_dir, progress=None, target_id='yagami', variant_ids=None,
-              source_root=None, profile_mode='simple'):
+              source_root=None, profile_mode='simple', workers=1, cleanup_working_files=None):
     from um.dragon_oneclick import run
     from um.dragon_mod_package import combine_mod_folders
     from um.dragon_targets import target_references, get_target
@@ -188,62 +225,119 @@ def run_batch(vrm, references, blender, addon, action_blend, baseline_report,
     save()
     filtered = []
     preparation_cache = {}  # measured, in-memory, scoped to this VRM batch only
-    try:
-        for index, key in enumerate(keys):
-            progress(f'Model switch candidate {index+1}/{len(keys)}: {key}')
-            refs = references if key == target_id else target_references(
-                key, bundle/'PrivateData' if source_root is None else None, source_root=source_root)
-            # A user-selected base reference cannot silently redefine a shared slot.
+    import concurrent.futures
+    import time
+    started = time.time()
+    count = len(keys)
+    cleanup = (count > 6) if cleanup_working_files is None else bool(cleanup_working_files)
+    custom_base = get_target(target_id).custom_references is not None
+    profile_root = (Path(__file__).resolve().parents[1]/'userdata/Profiles') if (source_root is not None or custom_base) else bundle/'Profiles'
+    last_mod = None
+    last_kept = None
+
+    def convert(key):
+        refs = references if key == target_id else target_references(
+            key, bundle/'PrivateData' if source_root is None else None, source_root=source_root)
+        # A user-selected base reference cannot silently redefine a shared slot.
+        if key == target_id:
+            declared = target_references(key, bundle/'PrivateData' if source_root is None else None,
+                                         source_root=source_root)
+            if any(Path(refs[r]).resolve() != Path(declared[r]).resolve() for r in declared):
+                raise ValueError('Variant batch requires the registered default references')
+        label = key if key == target_id else key.split('__', 1)[-1]
+        say = (lambda text, k=label: progress(f'{k}: {text}')) if count > 1 else progress
+        try:
+            return run(vrm, refs, blender, addon, action_blend, baseline_report,
+                       output/'Runs'/key, dummy_texture_dir, say, target_id=key,
+                       profile_root=profile_root, preparation_cache=preparation_cache, profile_mode=profile_mode)
+        finally:
+            if cleanup:
+                _drop_working_blends(output/'Runs'/key)
+
+    def attempt(key):
+        try:
+            return ('ok', convert(key))
+        except Exception as exc:  # noqa: BLE001 - reported per variant below
+            return ('error', exc)
+
+    def collect(key, outcome):
+        nonlocal last_mod, last_kept
+        kind, value = outcome
+        if kind == 'error':
+            # The default model is shared by every variant; any other failure only drops
+            # that variant (recorded, never silently) so the rest can still be packed.
             if key == target_id:
-                declared = target_references(key, bundle/'PrivateData' if source_root is None else None,
-                                             source_root=source_root)
-                if any(Path(refs[r]).resolve() != Path(declared[r]).resolve() for r in declared):
-                    raise ValueError('Variant batch requires the registered default references')
-            try:
-                result = run(vrm, refs, blender, addon, action_blend, baseline_report,
-                             output/'Runs'/key, dummy_texture_dir, progress, target_id=key,
-                             profile_root=(Path(__file__).resolve().parents[1]/'userdata/Profiles') if source_root is not None else bundle/'Profiles', preparation_cache=preparation_cache, profile_mode=profile_mode)
-            except Exception as exc:
-                # The default model is shared by every variant; any other failure only drops
-                # that variant (recorded, never silently) so the rest can still be packed.
-                if key == target_id:
-                    raise
-                report['failed_variants'].append({'id': key, 'error': str(exc)})
-                progress(f'Switch candidate {key} could not be converted (continuing with the others): {exc}')
-                save()
-                continue
-            mod = Path(result['mod_folder'])
-            kept = output / 'OwnedPayloads' / key
-            kept.mkdir(parents=True)
-            for file in mod.rglob('*'):
-                if not file.is_file():
-                    continue
-                rel = file.relative_to(mod)
-                posix = rel.as_posix()
-                if file.suffix.lower() == '.gmd':
-                    if posix not in owners:
-                        raise ValueError(f'Unexpected unregistered GMD in variant payload: {posix}')
-                    if owners[posix]['owner'] != key:
-                        continue
-                if posix == 'MODLOG.md':
-                    continue
-                dest = kept/rel
-                dest.parent.mkdir(parents=True, exist_ok=True)
-                shutil.copyfile(file, dest)
-            filtered.append(kept)
-            report['variants'].append({'id': key, 'status': result['candidate_status'],
-                                      'motion_validation':result.get('motion_validation','MOTION_NOT_RUN' if result['candidate_status']=='MOTION_NOT_RUN' else 'RUN'),
-                                      'motion_quality_passed':result.get('motion_quality_passed',result['candidate_status']=='MANUAL_REVIEW_REQUIRED'),
-                                      'run': str(output/'Runs'/key),
-                                      'owned_gmds': [p for p,o in owners.items() if o['owner']==key],
-                                      'skeleton_group':result.get('skeleton_group')})
+                raise value
+            report['failed_variants'].append({'id': key, 'error': str(value)})
+            progress(f'Switch candidate {key} could not be converted (continuing with the others): {value}')
             save()
+            return
+        result = value
+        mod = Path(result['mod_folder'])
+        last_mod = mod
+        kept = output / 'OwnedPayloads' / key
+        last_kept = kept
+        kept.mkdir(parents=True)
+        for file in mod.rglob('*'):
+            if not file.is_file():
+                continue
+            rel = file.relative_to(mod)
+            posix = rel.as_posix()
+            if file.suffix.lower() == '.gmd':
+                if posix not in owners:
+                    raise ValueError(f'Unexpected unregistered GMD in variant payload: {posix}')
+                if owners[posix]['owner'] != key:
+                    continue
+            if posix == 'MODLOG.md':
+                continue
+            dest = kept/rel
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(file, dest)
+        if cleanup and count > 1:
+            _drop_run_outputs(output/'Runs'/key)  # the owned files are copied; keep disk use low
+        filtered.append((key, kept))
+        report['variants'].append({'id': key, 'status': result['candidate_status'],
+                                  'motion_validation':result.get('motion_validation','MOTION_NOT_RUN' if result['candidate_status']=='MOTION_NOT_RUN' else 'RUN'),
+                                  'motion_quality_passed':result.get('motion_quality_passed',result['candidate_status']=='MANUAL_REVIEW_REQUIRED'),
+                                  'run': str(output/'Runs'/key),
+                                  'owned_gmds': [p for p,o in owners.items() if o['owner']==key],
+                                  'skeleton_group':result.get('skeleton_group')})
+        save()
+
+    try:
+        progress(f'Converting {count} model(s)' + (f' with {workers} parallel Blender jobs' if workers > 1 and count > 2 else ''))
+        # The default model goes first: the others reuse its skeleton measurements.
+        collect(target_id, attempt(target_id))
+        rest = [k for k in keys if k != target_id]
+        if workers > 1 and len(rest) > 1:
+            with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as pool:
+                futures = {pool.submit(attempt, k): k for k in rest}
+                for position, future in enumerate(concurrent.futures.as_completed(futures), 2):
+                    collect(futures[future], future.result())
+                    progress(f'Finished {position}/{count}: {futures[future]}')
+        else:
+            for position, key in enumerate(rest, 2):
+                progress(f'Model switch candidate {position}/{count}: {key}')
+                collect(key, attempt(key))
+        order = {k: i for i, k in enumerate(keys)}
+        report['variants'].sort(key=lambda row: order[row['id']])
+        filtered = [kept for _, kept in sorted(filtered, key=lambda pair: order[pair[0]])]
+        report['seconds'] = round(time.time() - started)
         if len(filtered) > 1:
             combined = combine_mod_folders(filtered, output/'ReviewPack',
                                           'VRM '+target_id+' model variants')
             report['mod_folder'] = combined['mod_folder']
         else:
-            report['mod_folder'] = str(mod)
+            if cleanup and count > 1 and last_kept is not None:
+                # the run's own mod folder was cleaned up; keep the finished mod in the batch folder
+                final = output / 'ReviewPack' / 'Mods' / last_mod.name
+                final.parent.mkdir(parents=True)
+                shutil.copytree(last_kept, final)
+                report['mod_folder'] = str(final)
+            else:
+                report['mod_folder'] = str(last_mod)
+        if cleanup and count > 1:
+            shutil.rmtree(output / 'OwnedPayloads', ignore_errors=True)  # duplicates of the combined mod
         report['adjustment_group_count'] = len(preparation_cache)
         report['motion_failed_variants'] = [r['id'] for r in report['variants'] if r['status'] == 'MOTION_CHECK_FAILED']
         report['motion_unchecked_variants']=[r['id'] for r in report['variants'] if r['motion_validation']=='MOTION_NOT_RUN']

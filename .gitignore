@@ -16,6 +16,8 @@
 *.vrm
 *.blend
 *.blend1
+# ...except the one shader file the bundled GMD add-on needs to import models
+!/Tool/vendor/yakuza-gmd-gmt-blender/yk_gmd_blender/blender/yakuza_shader.blend
 *.dds
 *.zip
 *.7z

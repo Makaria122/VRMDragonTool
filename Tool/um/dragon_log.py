@@ -155,6 +155,23 @@ def _clip(text: str) -> str:
     return text[:half] + f'\n... [{len(text) - OUTPUT_LIMIT} characters omitted] ...\n' + text[-half:]
 
 
+_ERROR_LINE = re.compile(r'(?i)\b(\w*Error|\w*Exception|failed|cannot|not found|no such file|denied)\b')
+
+
+def failure_summary(stdout: str, stderr: str, limit: int = 1500) -> str:
+    """Short text for an error dialog: the last error-looking lines, else the last lines of output."""
+    lines = [line.strip() for line in ((stderr or '') + chr(10) + (stdout or '')).splitlines() if line.strip()]
+    hits, seen = [], set()
+    for line in reversed(lines):
+        if _ERROR_LINE.search(line) and not line.startswith('File ') and line not in seen:
+            seen.add(line)
+            hits.append(line[:400])
+        if len(hits) >= 6:
+            break
+    text = chr(10).join(reversed(hits)) if hits else chr(10).join(lines[-12:])
+    return text[-limit:]
+
+
 def run_logged(command, label: str, timeout: float) -> subprocess.CompletedProcess:
     """subprocess.run(capture_output) that records the outcome; TimeoutExpired is re-raised."""
     logger = get_logger()

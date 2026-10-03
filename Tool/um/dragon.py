@@ -14,7 +14,7 @@ import tempfile
 from pathlib import Path
 
 from um.dragon_fit import fit_plan
-from um.dragon_log import run_logged
+from um.dragon_log import failure_summary, run_logged
 from um.dragon_beta import portable_data_path
 
 MAX_JSON = 64 * 1024 * 1024
@@ -210,7 +210,7 @@ def inspect_blender(vrm: str | Path, tops: str | Path, blender: str | Path,
         except subprocess.TimeoutExpired as exc:
             raise InspectionError(f"Blender inspection timed out after {timeout}s") from exc
         if proc.returncode or not target.is_file():
-            detail = (proc.stderr + "\n" + proc.stdout)[-2500:].strip()
+            detail = failure_summary(proc.stdout, proc.stderr)
             raise InspectionError(f"Blender inspection failed (exit {proc.returncode}): {detail}")
         try:
             result = json.loads(target.read_text(encoding="utf-8"))
@@ -283,7 +283,7 @@ def roundtrip_gmd(source: str | Path, blender: str | Path, addon: str | Path,
         except subprocess.TimeoutExpired as exc:
             raise InspectionError(f"Blender timed out; private working copy remains at {output}") from exc
         if proc.returncode or not result_path.is_file():
-            detail = (proc.stderr + "\n" + proc.stdout)[-2500:].strip()
+            detail = failure_summary(proc.stdout, proc.stderr)
             raise InspectionError(f"Roundtrip failed; private copy remains at {output}: {detail}")
         result = json.loads(result_path.read_text(encoding="utf-8"))
     if result.get("strict_roundtrip") is not True or result.get("working_copy") != str(output):

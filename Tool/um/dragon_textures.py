@@ -15,11 +15,29 @@ from pathlib import Path
 from PIL import Image, UnidentifiedImageError
 
 MAX_CHUNK = 64 * 1024 * 1024
-Image.MAX_IMAGE_PIXELS = 4096 * 4096
+MAX_SOURCE_SIDE = 8192   # larger source images are refused (memory); up to this size they are accepted
+MAX_OUTPUT_SIDE = 4096   # DDS textures are written at most this large
+IMAGE_MIMES = ('image/png', 'image/jpeg', 'image/webp')
+IMAGE_FORMATS = ('PNG', 'JPEG', 'WEBP')
+Image.MAX_IMAGE_PIXELS = MAX_SOURCE_SIDE * MAX_SOURCE_SIDE
 
 
 class TextureError(ValueError):
     pass
+
+
+def fit_for_dxt(image):
+    """Scale to at most MAX_OUTPUT_SIDE and round each side up to a multiple of 4 (DXT blocks).
+
+    Resampling keeps the 0..1 UV mapping valid, padding would not.
+    """
+    width, height = image.size
+    scale = min(1.0, MAX_OUTPUT_SIDE / max(width, height))
+    new_width = -(-max(4, round(width * scale)) // 4) * 4
+    new_height = -(-max(4, round(height * scale)) // 4) * 4
+    if (new_width, new_height) == (width, height):
+        return image
+    return image.resize((new_width, new_height), Image.LANCZOS)
 
 
 def _glb(path):
@@ -122,8 +140,8 @@ def extract(vrm: str | Path, output: str | Path, target_id: str = 'avatar') -> d
     with vrm.open('rb') as f:
         for image_id, filename in sorted(targets.items()):
             image = images[image_id]
-            if not isinstance(image, dict) or image.get('mimeType') not in ('image/png', 'image/jpeg'):
-                raise TextureError(f'Only embedded PNG/JPEG images are supported: {image_id}')
+            if not isinstance(image, dict) or image.get('mimeType') not in IMAGE_MIMES:
+                raise TextureError(f'Only embedded PNG/JPEG/WebP images are supported: {image_id}')
             view_id = image.get('bufferView')
             if type(view_id) is not int or not 0 <= view_id < len(views):
                 raise TextureError(f'Image is not embedded in GLB: {image_id}')
@@ -136,23 +154,26 @@ def extract(vrm: str | Path, output: str | Path, target_id: str = 'avatar') -> d
             blob = f.read(length)
             try:
                 with Image.open(io.BytesIO(blob)) as source:
-                    source.load()
-                    if source.format not in ('PNG', 'JPEG') or max(source.size) > 4096:
+                    if source.format not in IMAGE_FORMATS or max(source.size) > MAX_SOURCE_SIDE:
                         raise TextureError(f'Unsupported image format/size: {image_id}')
-                    if source.width % 4 or source.height % 4:
-                        raise TextureError(f'Image dimensions must be multiples of 4: {image_id}')
+                    source.load()
                     rgba = source.convert('RGBA')
-            except (UnidentifiedImageError, OSError) as exc:
+            except (UnidentifiedImageError, OSError, Image.DecompressionBombError) as exc:
                 raise TextureError(f'Invalid embedded image: {image_id}') from exc
+            original_size = rgba.size
+            rgba = fit_for_dxt(rgba)
             dest = output / filename
             with dest.open('xb') as target:
                 rgba.save(target, format='DDS', pixel_format='DXT5')
             with Image.open(dest) as check:
                 if check.size != rgba.size:
                     raise TextureError(f'DDS dimension mismatch: {image_id}')
-            written.append({'image_index': image_id, 'filename': filename,
-                            'width': rgba.width, 'height': rgba.height,
-                            'sha256': hashlib.sha256(dest.read_bytes()).hexdigest()})
+            entry_out = {'image_index': image_id, 'filename': filename,
+                         'width': rgba.width, 'height': rgba.height,
+                         'sha256': hashlib.sha256(dest.read_bytes()).hexdigest()}
+            if original_size != rgba.size:
+                entry_out['resized_from'] = list(original_size)
+            written.append(entry_out)
     for index, filename, rgba in flat_files:
         dest = output / filename
         with dest.open('xb') as target:

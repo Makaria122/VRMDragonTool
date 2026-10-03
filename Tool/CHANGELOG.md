@@ -1,5 +1,10 @@
 # Changes
 
+## Fixes found by a fresh GitHub download
+- The shader file the bundled GMD add-on needs (`yakuza_shader.blend`) was missing from the public repository; it is now exported byte for byte (every other `.blend` stays private) and `.blend` is marked binary in `.gitattributes`.
+- Avatars with textures whose size is not a multiple of 4 (for example the common 2x2 flat-colour images) no longer stop the conversion: images are resampled so each side is a multiple of 4, textures larger than 4096 px are scaled down to at most 4096 (sources up to 8192 px are accepted), and WebP images are accepted too. Resampling keeps the 0..1 UV mapping valid; the original size is recorded as `resized_from` in `texture-map.json`.
+- Error dialogs and messages show the real error lines of a failed Blender step instead of the tail of unrelated output.
+
 ## Optional Blender download
 - When no Blender is found at start-up, the tool asks whether to download the pinned official portable Blender 4.5.14 (about 400 MB) from `download.blender.org`; new "Blender" tab with progress, cancel and "choose my own blender.exe". Nothing is downloaded without a confirmation.
 - The archive must match the reviewed size and SHA-256, the host must be `download.blender.org` over HTTPS (redirects elsewhere are refused), the zip is unpacked into a staging folder with strict path/symlink/size checks, moved into `Tool/runtime/blender` in one step and started once (`--version`) to confirm it is the expected Blender; any failure or cancel leaves nothing behind, and an existing non-empty `Tool/runtime/blender` is never overwritten. A stale saved Blender path no longer hides an auto-detected one.

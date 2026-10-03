@@ -1,4 +1,4 @@
-# VRMDragonTool
+# VRMDragonTool (Only Lost Judgment is supported for now.)
 
 > [!WARNING]
 > # WORK IN PROGRESS (WIP): UNSTABLE

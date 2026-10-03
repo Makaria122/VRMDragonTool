@@ -214,7 +214,8 @@ def run(vrm: str | Path, references: dict[str,str | Path], blender: str | Path,
         for slot in target.slots:
             role=slot.key
             combined_regions=set(slot.source_regions)
-            job={'region':slot.region,'target_slot':role,'target_bone_count':target.bone_count,
+            job={'region':slot.region,'target_slot':role,
+                 'target_bone_count':(target.slot_bone_counts or {}).get(role,target.bone_count),
                  'target_id':target_id,'source_regions':list(slot.source_regions),
                  'original_gmd':str(refs[slot.reference_role]),'working_copy':'UNBUILT_PRIVATE_CANDIDATE',
                  'addon':str(addon),'dds_dir':str(output/'textures'),

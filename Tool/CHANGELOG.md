@@ -1,5 +1,11 @@
 # Changes
 
+## Custom targets: whole characters at once
+- New "Whole character" tab in the custom-target dialog: choose a folder and type a character name; every GMD whose name contains it is found, inspected in Blender (read-only), and listed with tick boxes (base set always added; undressed, swimwear, dead, other-age, test and special-pose models, unreadable files, other skeletons and body models without feet are left out by default and explained). Registered as one custom target whose extra parts (other outfits, hair styles, faces) become variants: with the switch-target checkbox on, one conversion replaces every part of the character.
+- Faster batches: a variant exports only its own slot, parts with a different bone count use their own (per-slot bone counts), a few Blender jobs run in parallel ("Parallel Blender jobs", default 3, also used for the Lost Judgment variants), and for batches of more than six models the working .blend files, textures and review copies are deleted as each model finishes (a 40-part character: about 7 minutes and 160 MB instead of an estimated hours and 8 GB).
+- Fixes: the character search no longer follows Windows junctions; a batch where only one model survives keeps a usable mod folder after the cleanup; validation errors of the custom-target dialog are written to the log.
+- Like a Dragon 8 Ichiban: 62 matching files, 40 converted without failures. 27 new tests.
+
 ## Custom targets: GMD files from other Dragon Engine games
 - New "Other (add your own GMD files)..." entry in the target list: pick a body GMD (face/hair next to it are found automatically), the tool inspects it in Blender (read-only), checks the skeleton and registers a custom target in `Tool/userdata/targets/` with private copies of the files (SHA-256 checked on every use; the originals, even inside a game folder, are never changed). Layouts: body only (single GMD), body+face, or body+face+hair; output keeps `chara/<region>/<name>/<name>.gmd`. A skeleton without the required bones is refused with the names of the missing bones. No switch targets for custom targets.
 - First real case: Like a Dragon 8 Ichiban (297 bones, all 51 expected bone names present): a VRM converted to three GMDs and fits the skeleton in Blender. In-game behaviour is unverified.

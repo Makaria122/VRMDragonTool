@@ -44,6 +44,7 @@ class DragonWindow:
         self.settings_file = self.user_data / 'settings.json'
         saved_include_variants = True  # default ON; the last choice is restored from settings.json
         saved_profile_mode = 'simple'
+        saved_jobs = 3
         if self.settings_file.is_file():
             try:
                 settings=json.loads(self.settings_file.read_text(encoding='utf-8'))
@@ -55,6 +56,8 @@ class DragonWindow:
                     saved_include_variants = settings['include_variants']
                 if settings.get('profile_mode') in ('simple','detailed'):
                     saved_profile_mode = settings['profile_mode']
+                if isinstance(settings.get('parallel_jobs'),int) and 1<=settings['parallel_jobs']<=8:
+                    saved_jobs = settings['parallel_jobs']
             except (OSError,ValueError):
                 pass
         self.messages: queue.Queue = queue.Queue()
@@ -104,6 +107,10 @@ class DragonWindow:
         ttk.Checkbutton(variant_row,text='Also validate and generate switch targets whose references were found (unverified in-game)',
                         variable=self.include_variants).pack(side='left')
         ttk.Button(variant_row,text='Targets and exclusions',command=self.show_variants).pack(side='left',padx=6)
+        self.parallel_jobs=tk.IntVar(value=saved_jobs)
+        self.parallel_jobs.trace_add('write',lambda *_:self.save_settings())
+        ttk.Label(variant_row,text='Parallel Blender jobs').pack(side='left',padx=(14,4))
+        ttk.Spinbox(variant_row,from_=1,to=8,width=3,textvariable=self.parallel_jobs).pack(side='left')
         for name, label, kind in (
             ("vrm", "VRM (required)", "VRM files (*.vrm)",),
             ("tops", "Torso tops.gmd (required)", "GMD files (*.gmd)"),
@@ -257,7 +264,8 @@ class DragonWindow:
             try:
                 for role,file in target_references(target.id).items():
                     self.paths[role].set(file)
-                self.status.set(f'{target.label}: {target.bone_count} bones. {target.motion_note}')
+                extra=f' {len(target.custom_parts)} extra parts (outfits, hair, faces).' if target.custom_parts else ''
+                self.status.set(f'{target.label}: {target.bone_count} bones.{extra} {target.motion_note}')
             except (OSError,ValueError) as exc:
                 self.status.set(str(exc))
             return
@@ -298,7 +306,8 @@ class DragonWindow:
     def save_settings(self):
         self.user_data.mkdir(parents=True,exist_ok=True)
         data={'source_root':self.source_root.get().strip(),'blender':self.paths['blender'].get().strip(),
-              'include_variants':self.include_variants.get(),'profile_mode':self.profile_mode.get()}
+              'include_variants':self.include_variants.get(),'profile_mode':self.profile_mode.get(),
+              'parallel_jobs':self.jobs_value()}
         temp=self.settings_file.with_suffix('.tmp')
         temp.write_text(json.dumps(data,ensure_ascii=False,indent=2),encoding='utf-8');temp.replace(self.settings_file)
 
@@ -370,24 +379,188 @@ class DragonWindow:
         self.logs_status.set(f'Deleted {count} file(s).')
         self.logs_refresh()
 
+    def jobs_value(self):
+        try:return max(1,min(8,int(self.parallel_jobs.get())))
+        except (tk.TclError,ValueError):return 3
+
     def refresh_target_list(self):
         from um.dragon_targets import target_ids
         self.target_box.configure(values=list(target_ids())+[OTHER_ENTRY])
 
     def custom_target_dialog(self):
-        from um import dragon_custom_targets as custom
-        from um.dragon_targets import target_ids
         if not self.blender_usable():
             messagebox.showinfo('Blender','Set up Blender first (see the Blender tab); it is needed to read the GMD files.')
             return
-        nl=chr(10)
         win=tk.Toplevel(self.root);win.title('Add a custom target');win.transient(self.root)
         try:win.grab_set()
         except tk.TclError:pass  # not viewable yet; the dialog still works
-        win.columnconfigure(1,weight=1)
-        ttk.Label(win,text='Use GMD files from any Dragon Engine game that you extracted yourself. The tool reads them once, '
+        notebook=ttk.Notebook(win);notebook.pack(fill='both',expand=True,padx=8,pady=8)
+        whole=ttk.Frame(notebook,padding=8);single=ttk.Frame(notebook,padding=8)
+        notebook.add(whole,text='Whole character (recommended)');notebook.add(single,text='Single GMD files')
+        self._group_tab(whole,win)
+        self._single_tab(single,win)
+        ttk.Button(win,text='Close',command=win.destroy).pack(pady=(0,8))
+
+    def _custom_added(self,win,saved,extra=''):
+        self.refresh_target_list()
+        self.target_id.set(saved['id']);self.select_target()
+        nl=chr(10)
+        warnings=(nl+nl+nl.join(saved['warnings'][:5])) if saved['warnings'] else ''
+        messagebox.showinfo('Custom target',f"Added: {saved['label']}{nl}{saved['bone_count']} bones, layout {saved['layout']}.{extra}{warnings}",parent=win)
+        win.destroy()
+
+    def _group_tab(self,frame,win):
+        from um import dragon_custom_targets as custom
+        from um.dragon_targets import target_ids
+        nl=chr(10)
+        frame.columnconfigure(1,weight=1)
+        ttk.Label(frame,text='Replace every part of a character at once. Choose the folder with the files you extracted and type the '
+                  'character name: all GMD files whose name contains it (outfits, hair styles, faces) are found and checked. '
+                  'Undressed, swimwear, dead, other-age, test and special-pose models are left unticked; tick them if you want them. '
+                  'In-game results are unverified; the game folder is never changed.',wraplength=700).grid(row=0,column=0,columnspan=3,sticky='w',pady=(0,8))
+        folder=tk.StringVar(value=self.source_root.get().strip());name=tk.StringVar();label=tk.StringVar()
+        def browse_folder():
+            chosen=filedialog.askdirectory(parent=win,title='Folder with the extracted game files',mustexist=True)
+            if chosen:folder.set(chosen)
+        ttk.Label(frame,text='Folder with the extracted files').grid(row=1,column=0,sticky='w',pady=3)
+        ttk.Entry(frame,textvariable=folder,width=60).grid(row=1,column=1,sticky='we',pady=3)
+        ttk.Button(frame,text='Browse...',command=browse_folder).grid(row=1,column=2,padx=6)
+        ttk.Label(frame,text='Character name').grid(row=2,column=0,sticky='w',pady=3)
+        ttk.Entry(frame,textvariable=name,width=30).grid(row=2,column=1,sticky='w',pady=3)
+        search_button=ttk.Button(frame,text='Search');search_button.grid(row=2,column=2,padx=6)
+        state=tk.StringVar(value='Example: ichiban')
+        ttk.Label(frame,textvariable=state,wraplength=700).grid(row=3,column=0,columnspan=3,sticky='w',pady=4)
+        columns=(('use','Use',46),('role','Part',50),('file','File',250),('bones','Bones',50),('note','Note',300))
+        tree=ttk.Treeview(frame,columns=[c[0] for c in columns],show='headings',height=12,selectmode='none')
+        for key,title,width in columns:
+            tree.heading(key,text=title);tree.column(key,width=width,anchor='w')
+        scroll=ttk.Scrollbar(frame,orient='vertical',command=tree.yview);tree.configure(yscrollcommand=scroll.set)
+        tree.grid(row=4,column=0,columnspan=2,sticky='nsew');scroll.grid(row=4,column=2,sticky='ns')
+        frame.rowconfigure(4,weight=1)
+        controls=ttk.Frame(frame);controls.grid(row=5,column=0,columnspan=3,sticky='we',pady=6)
+        data={'cands':[],'base':{},'inspections':{},'selected':set(),'default':set()}
+        result_queue=queue.Queue()
+        def show():
+            tree.delete(*tree.get_children())
+            base_stems={c['stem'] for c in data['base'].values()}
+            for c in data['cands']:
+                mark='[x]' if c['stem'] in data['selected'] else ('[ ]' if c['ok'] else '[-]')
+                note='base set (always added)' if c['stem'] in base_stems else '; '.join(
+                    filter(None,[c['reason'].split(nl)[0][:70] if not c['ok'] else '',', '.join(c['flags'])]))
+                tree.insert('','end',iid=c['stem'],values=(mark,c['role'],c['stem'],c['bone_count'] or '',note))
+            usable=sum(1 for c in data['cands'] if c['ok'])
+            state.set(f"{len(data['cands'])} files found, {usable} usable; {len(data['selected'])} will be added "
+                      f"(including the {len(base_stems)} files of the base set). Click [ ] / [x] to change.")
+        def toggle(event):
+            if tree.identify_region(event.x,event.y)!='cell' or tree.identify_column(event.x)!='#1':return
+            stem=tree.identify_row(event.y)
+            item=next((c for c in data['cands'] if c['stem']==stem),None)
+            if item is None or not item['ok'] or stem in {c['stem'] for c in data['base'].values()}:return
+            data['selected'].symmetric_difference_update({stem});show()
+        tree.bind('<Button-1>',toggle)
+        def tick_all():
+            data['selected']={c['stem'] for c in data['cands'] if c['ok']};show()
+        def untick_all():
+            data['selected']={c['stem'] for c in data['base'].values()};show()
+        def reset():
+            data['selected']=set(data['default']);show()
+        ttk.Button(controls,text='Tick all usable',command=tick_all).pack(side='left',padx=(0,6))
+        ttk.Button(controls,text='Untick all',command=untick_all).pack(side='left',padx=(0,6))
+        ttk.Button(controls,text='Default',command=reset).pack(side='left',padx=(0,14))
+        ttk.Label(controls,text='Name in the list').pack(side='left',padx=(0,4))
+        ttk.Entry(controls,textvariable=label,width=26).pack(side='left',padx=(0,10))
+        add_button=ttk.Button(controls,text='Add this character',state='disabled');add_button.pack(side='left')
+        def poll():
+            try:kind,payload=result_queue.get_nowait()
+            except queue.Empty:
+                win.after(150,poll);return
+            if kind=='progress':
+                state.set(payload);win.after(150,poll);return
+            search_button.configure(state='normal')
+            if kind=='error':
+                state.set(payload);messagebox.showerror('Custom target',payload,parent=win);return
+            if kind=='found':
+                data.update(payload);show()
+                if data['base'].get('tops'):
+                    add_button.configure(state='normal')
+                    if not label.get():label.set(f"{name.get().strip().title()} (all parts)")
+                else:
+                    add_button.configure(state='disabled')
+                    state.set(state.get()+' No usable body (tops) file was found, so nothing can be added.')
+                return
+            saved,skipped=payload
+            extra=f" {len(saved['parts'])} extra parts."
+            if skipped:
+                extra+=f" {len(skipped)} left out: "+', '.join(f"{s['stem']} ({s['reason'][:40]})" for s in skipped[:4])+('...' if len(skipped)>4 else '')
+            self._custom_added(win,saved,extra)
+        def search():
+            root,text=folder.get().strip(),name.get().strip()
+            if not root or not text:
+                state.set('Choose the folder and type the character name first.');return
+            search_button.configure(state='disabled');add_button.configure(state='disabled')
+            state.set('Searching...')
+            blender=Path(self.paths['blender'].get().strip());addon=Path(self.paths['addon'].get().strip())
+            def work():
+                try:
+                    cands=custom.scan_character(root,text)
+                    items=[(c['role'],c['path']) for c in cands if c['role'] in custom.ROLES]
+                    if not items:
+                        raise custom.CustomTargetError(f'No body, face or hair GMD with "{text}" in its name was found in that folder.')
+                    inspections=custom.inspect_paths(items,blender,addon,
+                        progress=lambda done,total:result_queue.put(('progress',f'Reading the GMD files with Blender... {done}/{total}')))
+                    custom.classify(cands,inspections)
+                    base=custom.suggest_base(cands)
+                    result_queue.put(('found',{'cands':cands,'inspections':inspections,'base':base,
+                                               'selected':custom.default_selection(cands,base),
+                                               'default':custom.default_selection(cands,base)}))
+                except custom.CustomTargetError as exc:
+                    dragon_log.get_logger().error('Character search refused: %s',exc)
+                    result_queue.put(('error',str(exc)))
+                except Exception as exc:
+                    dragon_log.log_exception('Character search failed',exc)
+                    result_queue.put(('error',str(exc)+nl+nl+LOG_HINT))
+            threading.Thread(target=work,daemon=True).start()
+            win.after(150,poll)
+        search_button.configure(command=search)
+        def add():
+            base=data['base']
+            if not base.get('tops'):return
+            files={role:c['path'] for role,c in base.items()}
+            base_inspections={role:data['inspections'][str(Path(c['path']).resolve())] for role,c in base.items()}
+            chosen=[c for c in data['cands'] if c['stem'] in data['selected']]
+            target_id=custom.sanitize_id(base['tops']['stem'])
+            replace=False
+            if target_id in target_ids():
+                if not messagebox.askokcancel('Custom target','A custom target named '+target_id+' already exists. Replace it?',parent=win):return
+                replace=True
+            search_button.configure(state='disabled');add_button.configure(state='disabled')
+            state.set('Copying the files into the private store...')
+            title=label.get().strip() or None
+            def work():
+                try:
+                    definition=custom.build_definition(files,base_inspections,label=title)
+                    definition,skipped=custom.add_parts(definition,chosen)
+                    saved=custom.import_and_save(definition,files,replace=replace,
+                                                 part_files={c['stem']:c['path'] for c in chosen})
+                    result_queue.put(('added',(saved,skipped)))
+                except custom.CustomTargetError as exc:
+                    dragon_log.get_logger().error('Custom character refused: %s',exc)
+                    result_queue.put(('error',str(exc)))
+                except Exception as exc:
+                    dragon_log.log_exception('Custom character failed',exc)
+                    result_queue.put(('error',str(exc)+nl+nl+LOG_HINT))
+            threading.Thread(target=work,daemon=True).start()
+            win.after(150,poll)
+        add_button.configure(command=add)
+
+    def _single_tab(self,frame,win):
+        from um import dragon_custom_targets as custom
+        from um.dragon_targets import target_ids
+        nl=chr(10)
+        frame.columnconfigure(1,weight=1)
+        ttk.Label(frame,text='Use GMD files from any Dragon Engine game that you extracted yourself. The tool reads them once, '
                   'checks that their skeleton fits, and keeps private copies in Tool/userdata/targets. The game folder is never '
-                  'changed. In-game results are unverified.',wraplength=560).grid(row=0,column=0,columnspan=3,sticky='w',padx=10,pady=(10,6))
+                  'changed. In-game results are unverified.',wraplength=640).grid(row=0,column=0,columnspan=3,sticky='w',pady=(0,6))
         values={role:tk.StringVar() for role in ('tops','face','hair')}
         name=tk.StringVar()
         def browse(role):
@@ -398,19 +571,17 @@ class DragonWindow:
                 for other,found in custom.find_siblings(chosen).items():
                     if not values[other].get():values[other].set(str(found))
                 if not name.get():name.set(Path(chosen).stem)
-        for row,(role,label) in enumerate((('tops','Body GMD (tops, required)'),('face','Face GMD (optional)'),
-                                           ('hair','Hair GMD (optional)')),start=1):
-            ttk.Label(win,text=label).grid(row=row,column=0,sticky='w',padx=10,pady=3)
-            ttk.Entry(win,textvariable=values[role],width=60).grid(row=row,column=1,sticky='we',pady=3)
-            ttk.Button(win,text='Browse...',command=lambda r=role:browse(r)).grid(row=row,column=2,padx=10)
-        ttk.Label(win,text='Name').grid(row=4,column=0,sticky='w',padx=10,pady=3)
-        ttk.Entry(win,textvariable=name,width=60).grid(row=4,column=1,sticky='we',pady=3)
+        for row,(role,text) in enumerate((('tops','Body GMD (tops, required)'),('face','Face GMD (optional)'),
+                                          ('hair','Hair GMD (optional)')),start=1):
+            ttk.Label(frame,text=text).grid(row=row,column=0,sticky='w',pady=3)
+            ttk.Entry(frame,textvariable=values[role],width=60).grid(row=row,column=1,sticky='we',pady=3)
+            ttk.Button(frame,text='Browse...',command=lambda r=role:browse(r)).grid(row=row,column=2,padx=6)
+        ttk.Label(frame,text='Name').grid(row=4,column=0,sticky='w',pady=3)
+        ttk.Entry(frame,textvariable=name,width=60).grid(row=4,column=1,sticky='we',pady=3)
         state=tk.StringVar(value='Choose the body GMD; the face and hair GMDs next to it are found automatically.')
-        ttk.Label(win,textvariable=state,wraplength=560).grid(row=5,column=0,columnspan=3,sticky='w',padx=10,pady=8)
+        ttk.Label(frame,textvariable=state,wraplength=640).grid(row=5,column=0,columnspan=3,sticky='w',pady=8)
         result_queue=queue.Queue()
-        buttons=ttk.Frame(win);buttons.grid(row=6,column=0,columnspan=3,pady=(0,10))
-        add_button=ttk.Button(buttons,text='Inspect and add');add_button.pack(side='left',padx=6)
-        ttk.Button(buttons,text='Close',command=win.destroy).pack(side='left',padx=6)
+        add_button=ttk.Button(frame,text='Inspect and add');add_button.grid(row=6,column=0,columnspan=3)
         def finish():
             try:kind,data=result_queue.get_nowait()
             except queue.Empty:
@@ -418,11 +589,7 @@ class DragonWindow:
             add_button.configure(state='normal')
             if kind=='error':
                 state.set(data);messagebox.showerror('Custom target',data,parent=win);return
-            self.refresh_target_list()
-            self.target_id.set(data['id']);self.select_target()
-            note=(nl+nl+nl.join(data['warnings'])) if data['warnings'] else ''
-            messagebox.showinfo('Custom target',f"Added: {data['label']}{nl}{data['bone_count']} bones, layout {data['layout']}.{note}",parent=win)
-            win.destroy()
+            self._custom_added(win,data)
         def add():
             files={role:Path(var.get().strip()) for role,var in values.items() if var.get().strip()}
             if 'tops' not in files:
@@ -448,6 +615,8 @@ class DragonWindow:
                     definition=custom.build_definition(files,inspections,label=label)
                     result_queue.put(('ok',custom.import_and_save(definition,files,replace=replace)))
                 except custom.CustomTargetError as exc:
+                    dragon_log.get_logger().error('Custom target refused: %s (files: %s)',exc,
+                                                  ', '.join(str(p) for p in files.values()))
                     result_queue.put(('error',str(exc)))
                 except Exception as exc:
                     dragon_log.log_exception('Custom target failed',exc)
@@ -728,14 +897,17 @@ class DragonWindow:
             messagebox.showerror('Output folder', 'A private output with the same name exists. Wait a moment and retry.')
             return
         from um.dragon_targets import get_target as _target_of
-        use_variants=self.include_variants.get() and _target_of(target_id).custom_references is None
+        spec=_target_of(target_id)
+        is_custom=spec.custom_references is not None
+        use_variants=self.include_variants.get() and (not is_custom or bool(spec.custom_parts))
         profile_mode=self.profile_mode.get()
+        jobs=self.jobs_value()
         if use_variants:
             from um.dragon_variants import availability
-            if not self.source_root.get().strip():
+            if not is_custom and not self.source_root.get().strip():
                 messagebox.showerror('Missing references','Specify the extracted Chara folder to generate switch targets.');return
             try:
-                count=sum(r['ready'] for r in availability(target_id,source_root=self.source_root.get().strip()))
+                count=sum(r['ready'] for r in availability(target_id,source_root=None if is_custom else self.source_root.get().strip()))
             except (OSError,ValueError) as exc:
                 messagebox.showerror('Reference search',str(exc));return
             if not messagebox.askokcancel('Convert switch targets too',f'Converts {count} layout(s) individually. In-game support is unverified.\nContinue?'):
@@ -758,7 +930,7 @@ class DragonWindow:
                            values['blender'],values['addon'],action,baseline,folder,dummy_dir,
                            progress=lambda text:self.messages.put(('progress',text)),
                            target_id=target_id,profile_mode=profile_mode,
-                           **({'source_root':source_root} if use_variants else {}))
+                           **({'source_root':None if is_custom else source_root,'workers':jobs} if use_variants else {}))
                 self.messages.put(('ok',report))
             except Exception as exc:
                 dragon_log.log_exception('Task failed', exc)

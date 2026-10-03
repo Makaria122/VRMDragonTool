@@ -2,6 +2,8 @@
 import importlib.util, json, sys, traceback
 from pathlib import Path
 import bpy
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from dragon_ground_measurement import foot_weighted_minimum
 
 
 def load_addon(folder):
@@ -9,6 +11,28 @@ def load_addon(folder):
     spec = importlib.util.spec_from_file_location('yk_gmd_blender', package/'__init__.py', submodule_search_locations=[str(package)])
     mod = importlib.util.module_from_spec(spec); sys.modules['yk_gmd_blender'] = mod
     spec.loader.exec_module(mod); mod.register()
+
+
+FOOT_GROUPS = {'asi3_l_n', 'asi3_r_n', 'asi4_l_n', 'asi4_r_n'}
+
+
+def foot_support(rig):
+    """True when foot-weighted vertices reach below the ankle (same test the conversion uses for the floor)."""
+    if rig is None:
+        return None
+    ankles = [(rig.matrix_world @ rig.data.bones[n].head_local).z for n in ('asi3_l_n', 'asi3_r_n') if n in rig.data.bones]
+    if not ankles:
+        return None
+    ankle_z = sum(ankles) / len(ankles)
+    def vertices():
+        for ob in bpy.data.objects:
+            if ob.type != 'MESH':
+                continue
+            names = {g.index: g.name for g in ob.vertex_groups}
+            for v in ob.data.vertices:
+                yield (ob.matrix_world @ v.co).z, {names[g.group]: g.weight for g in v.groups if g.group in names}
+    low = foot_weighted_minimum(vertices(), FOOT_GROUPS)
+    return low is not None and low <= ankle_z - 0.005
 
 
 def inspect(path):
@@ -43,7 +67,7 @@ def inspect(path):
         meshes.append({'name':ob.name,'vertices':len(ob.data.vertices),'faces':len(ob.data.polygons),'materials':mats})
     return {'load_status':'loaded','scene_name':rig.name if rig else None,'rig_name':rig.name if rig else None,
       'bone_count':len(bones),'bone_names':sorted(b.name for b in bones),'parent_signature':parent_sig,
-      'rest_transforms':rest,'meshes':meshes,'mesh_count':len(meshes),'shaders':sorted(set(shaders)),'warnings':[]}
+      'rest_transforms':rest,'meshes':meshes,'mesh_count':len(meshes),'shaders':sorted(set(shaders)),'foot_support':foot_support(rig),'warnings':[]}
 
 if __name__=='__main__':
     arg=json.loads(Path(sys.argv[sys.argv.index('--')+1]).read_text(encoding='utf8'))

@@ -2,6 +2,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from um.dragon_targets import get_target, target_ids, target_references
@@ -9,6 +10,12 @@ from um.dragon_textures import texture_namespace, TextureError
 
 
 class TargetTests(unittest.TestCase):
+    def setUp(self):
+        # Targets the user registered on this machine must not change what the built-in checks see.
+        patcher = patch('um.dragon_custom_targets.list_ids', return_value=[])
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
     def test_existing_layouts_unchanged(self):
         self.assertEqual(get_target('yagami').bone_count, 358)
         self.assertEqual(len(get_target('yagami').slots), 3)

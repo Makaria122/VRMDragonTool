@@ -71,6 +71,14 @@ def texture_namespace(vrm: Path, target_id: str = 'avatar') -> str:
         target_id = target_id.split('__', 1)[0]
     if target_id != 'avatar' and target_id not in target_ids():
         raise TextureError('Unsupported texture namespace target')
+    if target_id.startswith('custom_'):
+        # Distinct short code per custom target so two custom targets never share DDS names.
+        code = 'u' + hashlib.sha256(target_id.encode()).hexdigest()[:3]
+        digest = hashlib.sha256()
+        with vrm.open('rb') as stream:
+            for block in iter(lambda: stream.read(1024 * 1024), b''):
+                digest.update(block)
+        return f'v_{code}_{digest.hexdigest()[:16]}'
     # Distinct short codes: initials alone collide for Sugiura/Saori/Soma/Sawa.
     code = {'avatar':'a', 'yagami':'y', 'kaito':'k', 'sugiura':'sg',
             'tsukumo':'tk', 'saori':'sr', 'higashi':'hg', 'tesso':'ts',

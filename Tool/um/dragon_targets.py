@@ -23,6 +23,9 @@ class Target:
     reference_files: dict[str, str]
     slots: tuple[ExportSlot, ...]
     motion_note: str
+    # Only for user-defined ("Other") targets: the private copies of the GMDs and their SHA-256.
+    custom_references: dict | None = None
+    custom_hashes: dict | None = None
 
 
 _TARGETS = {
@@ -82,8 +85,12 @@ for _id, _label, _bones, _tops, _face, _hair in _TRIALS:
            if _face and not _hair else ''))
 
 
+_BUILTIN_IDS = tuple(_TARGETS)
+
+
 def target_ids() -> tuple[str, ...]:
-    return tuple(_TARGETS)
+    from um import dragon_custom_targets as custom
+    return _BUILTIN_IDS + tuple(i for i in custom.list_ids() if i not in _BUILTIN_IDS)
 
 
 def get_target(target_id: str = "yagami") -> Target:
@@ -93,12 +100,29 @@ def get_target(target_id: str = "yagami") -> Target:
     try:
         return _TARGETS[target_id]
     except KeyError as exc:
+        if target_id.startswith('custom_'):
+            # Always read from disk: a re-registered custom target must not be served stale.
+            from um import dragon_custom_targets as custom
+            try:
+                return custom.to_target(custom.load_definition(target_id))
+            except custom.CustomTargetError as problem:
+                raise ValueError(str(problem)) from problem
         raise ValueError(f"Unsupported target character: {target_id}") from exc
 
 
 def target_references(target_id: str, private_data: str | Path | None = None,
                       source_root: str | Path | None = None) -> dict[str, str]:
     spec = get_target(target_id)
+    if spec.custom_references is not None:
+        import hashlib
+        for role, path in spec.custom_references.items():
+            file = Path(path)
+            if not file.is_file():
+                raise ValueError(f'Custom target file is missing: {file.name}; register the target again')
+            expected = (spec.custom_hashes or {}).get(str(path))
+            if expected and hashlib.sha256(file.read_bytes()).hexdigest() != expected:
+                raise ValueError(f'Custom target file changed since it was registered: {file.name}')
+        return dict(spec.custom_references)
     if source_root is not None:
         from um.dragon_asset_catalog import resolve_references
         return resolve_references(spec.reference_files, source_root)

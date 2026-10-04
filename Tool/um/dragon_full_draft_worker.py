@@ -511,7 +511,7 @@ def run(job):
     return {'region':job['region'],'review_only':True,'strict_export_reimport':True,
             'dummy_recipe':'explicit-four-slot-v1','exported_dummy_maps_verified':True,
             'dummy_material_attribute_count':dummy_verified,
-            'material_policy':'region-template-matte-v2','matte_specular_verified':True,
+            'material_policy':'region-template-matte-v3','matte_specular_verified':True,
             'target_bones':job.get('target_bone_count',358),'source_mesh_count':len(staged),'reimport_mesh_count':len(meshes),
             'staged':staged,'has_accessory_collapse':any(s['accessory_weight_fraction']>0 for s in staged),
             'motion_checked':False,'appearance_checked':False,'game_install_changed':False}

@@ -1,6 +1,7 @@
 """Explicit four-slot dummy-map recipe; no bpy dependency for synthetic tests."""
 from pathlib import Path
 
+PLAIN_CLOTHING_SHADER = 'sd_o1dzt'
 DUMMY_SLOTS = ('texture_multi', 'texture_normal', 'texture_rt', 'texture_rd')
 
 
@@ -17,6 +18,11 @@ def select_material_template(candidates, region):
     elif region == 'face':
         preferred = [(name, mat) for name, mat in safe
                      if name.lower().startswith('sd_o') and '[skin]' in name.lower()]
+    elif any(name.lower() == PLAIN_CLOTHING_SHADER for name, _ in safe):
+        # The plain opaque shader has no roughness/reflection maps of its own. Copying a character's own cloth
+        # shader (for example Kiryu's suit, sd_o1dzt_m2dzt_h2dz) kept its native rm/refl maps and made avatars
+        # look black in dark scenes (confirmed in game, 2026-10-04).
+        preferred = [(name, mat) for name, mat in safe if name.lower() == PLAIN_CLOTHING_SHADER]
     else:
         # sd_d1dzt came from eyeline/eyeshadow decals, not opaque clothing.
         # Copying it also copies its special attribute flags even at opacity 255.

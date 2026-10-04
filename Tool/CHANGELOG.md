@@ -1,5 +1,8 @@
 # Changes
 
+## Fix: bodies looked black in dark scenes
+- Clothing materials now copy the plain opaque shader (`sd_o1dzt`) of the target character when it has one. Before, the first opaque non-skin material was copied, which for Kiryu is the suit shader (`sd_o1dzt_m2dzt_h2dz`) with its own roughness/reflection maps (rm/refl) kept; with a dark VRM texture this turned black in dim cutscenes. Confirmed in game with Kiryu replaced by an avatar with a black coat; raising the specular color (0.039) or brightening dark textures changed little. Characters without a plain shader fall back to the old choice. Hair and face templates are unchanged. 4 new tests.
+
 ## New GUI: any Dragon Engine game by default, dark theme, Japanese
 - Rebuilt window with a sidebar (Convert, Advanced tools, Setup, Storage & logs, Settings). "Any Dragon Engine game: find a character by name" is now the default; the built-in Lost Judgment characters are the second choice. The "Lost Judgment beta" wording is gone.
 - Convert page in three steps (character, avatar, options); reference files, paths and the JSON report are folded away. Long work (searching, Blender) runs in the background so the window stays responsive.

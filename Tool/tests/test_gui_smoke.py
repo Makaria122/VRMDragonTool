@@ -73,7 +73,8 @@ class GuiSmokeTests(unittest.TestCase):
 
     def test_window_and_pages_are_not_labelled_lost_judgment_beta(self):
         self.assertEqual(self.root.title(), 'VRMDragonTool')
-        everything = ' '.join(texts(self.root))
+        # folder paths shown in the window (this checkout may itself be called '(Beta)') are not labels
+        everything = ' '.join(t for t in texts(self.root) if '\' not in t and '/' not in t)
         self.assertNotIn('β', everything)
         self.assertNotIn('Beta', everything)
 

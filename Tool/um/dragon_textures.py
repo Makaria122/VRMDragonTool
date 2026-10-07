@@ -40,6 +40,32 @@ def fit_for_dxt(image):
     return image.resize((new_width, new_height), Image.LANCZOS)
 
 
+def _srgb_from_linear(value: float) -> float:
+    value = min(1.0, max(0.0, value))
+    return 12.92 * value if value <= 0.0031308 else 1.055 * value ** (1 / 2.4) - 0.055
+
+
+def _linear_from_srgb(value: float) -> float:
+    return value / 12.92 if value <= 0.04045 else ((value + 0.055) / 1.055) ** 2.4
+
+
+def tint_lut(factor: float) -> list[int]:
+    """256-entry lookup: an sRGB texture value multiplied by a linear glTF colour factor, back to sRGB."""
+    return [round(255 * _srgb_from_linear(_linear_from_srgb(v / 255) * factor)) for v in range(256)]
+
+
+def tint_image(rgba, factor):
+    """Multiply the base colour texture by baseColorFactor like a glTF viewer does (the colour factor is linear)."""
+    red, green, blue, alpha = rgba.split()
+    lut_alpha = [min(255, max(0, round(v * factor[3]))) for v in range(256)]
+    return Image.merge('RGBA', (red.point(tint_lut(factor[0])), green.point(tint_lut(factor[1])),
+                                blue.point(tint_lut(factor[2])), alpha.point(lut_alpha)))
+
+
+def _needs_tint(factor) -> bool:
+    return any(abs(v - 1.0) > 0.004 for v in factor)
+
+
 def _glb(path):
     with path.open('rb') as f:
         header = f.read(12)
@@ -114,6 +140,7 @@ def extract(vrm: str | Path, output: str | Path, target_id: str = 'avatar') -> d
     if not all(isinstance(v, list) for v in (textures, images, views, materials)):
         raise TextureError('Invalid glTF image/material tables')
     targets = {}
+    tinted = {}
     flat_files = []
     material_map = []
     for index, mat in enumerate(materials):
@@ -121,6 +148,10 @@ def extract(vrm: str | Path, output: str | Path, target_id: str = 'avatar') -> d
             raise TextureError('Invalid material')
         ref = mat.get('pbrMetallicRoughness', {}).get('baseColorTexture', {})
         tid = ref.get('index') if isinstance(ref, dict) else None
+        factor = mat.get('pbrMetallicRoughness', {}).get('baseColorFactor', [1, 1, 1, 1])
+        if (not isinstance(factor, list) or len(factor) != 4
+                or any(type(v) not in (int, float) or not math.isfinite(v) or not 0 <= v <= 1 for v in factor)):
+            raise TextureError(f'Invalid base colour factor: {index}')
         entry = {'material_index': index, 'material_name': mat.get('name', f'material_{index}'),
                  'image_index': None, 'dds': None}
         if tid is not None:
@@ -131,22 +162,26 @@ def extract(vrm: str | Path, output: str | Path, target_id: str = 'avatar') -> d
             if type(image_id) is not int or not 0 <= image_id < len(images):
                 raise TextureError(f'Invalid embedded image reference: {index}')
             entry['image_index'] = image_id
-            entry['dds'] = f'{namespace}_d{image_id:02}.dds'
-            targets[image_id] = entry['dds']
+            if _needs_tint(factor):  # a grey 2x2 texture with a gold factor is gold: one tinted copy per material
+                entry['dds'] = f'{namespace}_d{image_id:02}_c{index:02}.dds'
+                entry['base_color_factor'] = list(factor)
+                tinted[entry['dds']] = (image_id, list(factor))
+            else:
+                entry['dds'] = f'{namespace}_d{image_id:02}.dds'
+                targets[image_id] = entry['dds']
         if entry['dds'] is None:
-            factor = mat.get('pbrMetallicRoughness', {}).get('baseColorFactor', [1, 1, 1, 1])
-            if (not isinstance(factor, list) or len(factor) != 4
-                    or any(type(v) not in (int, float) or not math.isfinite(v) or not 0 <= v <= 1 for v in factor)):
-                raise TextureError(f'Invalid flat-color material: {index}')
             entry['dds'] = f'{namespace}_f{index:02}.dds'
-            flat_files.append((index, entry['dds'], tuple(round(255 * v) for v in factor)))
+            flat_files.append((index, entry['dds'], tuple(round(255 * _srgb_from_linear(v)) for v in factor[:3])
+                               + (round(255 * factor[3]),)))
         material_map.append(entry)
-    if not targets and not flat_files:
+    if not targets and not flat_files and not tinted:
         raise TextureError('No glTF materials to export')
     output.mkdir()  # create only after validation; never overwrite existing assets
     written = []
     with vrm.open('rb') as f:
-        for image_id, filename in sorted(targets.items()):
+        jobs = [(image_id, filename, None) for image_id, filename in sorted(targets.items())]
+        jobs += [(image_id, filename, factor) for filename, (image_id, factor) in sorted(tinted.items())]
+        for image_id, filename, factor in jobs:
             image = images[image_id]
             if not isinstance(image, dict) or image.get('mimeType') not in IMAGE_MIMES:
                 raise TextureError(f'Only embedded PNG/JPEG/WebP images are supported: {image_id}')
@@ -170,6 +205,8 @@ def extract(vrm: str | Path, output: str | Path, target_id: str = 'avatar') -> d
                 raise TextureError(f'Invalid embedded image: {image_id}') from exc
             original_size = rgba.size
             rgba = fit_for_dxt(rgba)
+            if factor is not None:
+                rgba = tint_image(rgba, factor)
             dest = output / filename
             with dest.open('xb') as target:
                 rgba.save(target, format='DDS', pixel_format='DXT5')
@@ -179,6 +216,8 @@ def extract(vrm: str | Path, output: str | Path, target_id: str = 'avatar') -> d
             entry_out = {'image_index': image_id, 'filename': filename,
                          'width': rgba.width, 'height': rgba.height,
                          'sha256': hashlib.sha256(dest.read_bytes()).hexdigest()}
+            if factor is not None:
+                entry_out['base_color_factor'] = factor
             if original_size != rgba.size:
                 entry_out['resized_from'] = list(original_size)
             written.append(entry_out)

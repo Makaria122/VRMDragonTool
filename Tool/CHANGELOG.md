@@ -1,5 +1,10 @@
 # Changes
 
+## Fix: colour factors were ignored (gold/dark parts turned white or grey)
+- A glTF material can colour a texture with `baseColorFactor` (for example a grey 2x2 texture times an orange factor is gold, times 0.02 is nearly black). The tool used the texture alone, so those parts came out grey or white (shoe ribbons and jewels of a VRChat avatar). Each material whose factor is not white now gets its own tinted copy of the texture (factor in linear colour, texture in sRGB, like a viewer does); materials without a factor still share one file.
+- Flat-colour materials (no texture) are now written as sRGB; the linear factor was used as if it were already sRGB, which made them too dark.
+- 3 new tests.
+
 ## Fix: stretched face and missing hair parts with VRMs exported without Avatar Optimizer
 - **Vertex positions now come from the VRM file.** Blender's glTF importer does not reproduce every VRM: for the head mesh of one avatar it posed some bones (cheeks, tongue) with a 90 degree rotation and a 1.5 m offset, which stretched the face down to the chest in the game. The preview now reads the VRM itself and places every vertex where the glTF specification puts it (weight x joint world x inverse bind x position; checked against Blender on all meshes of the test avatar: identical except the broken head mesh). This replaces the earlier "bake Blender's pose" step, which stays only as a fallback when the VRM cannot be read.
 - **Parts with their own skeleton are converted too.** A twintail on its own 62 bones, a ribbon, a hairpin and a ring (props on bones) used to be dropped silently because they were not skinned to the main skeleton. They are now attached to the main skeleton through the nearest ancestor bone (a twintail follows the head). The conversion says which parts were attached and warns, naming them, about any mesh of the VRM that was left out.

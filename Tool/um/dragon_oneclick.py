@@ -210,7 +210,9 @@ def run(vrm: str | Path, references: dict[str,str | Path], blender: str | Path,
                       if re.sub(r'\.\d{3}$','',name) not in matmap}
         if unknown_mats:
             raise OneClickError(f'VRM materials without a matching DDS: {sorted(unknown_mats)}')
-        scale=json.loads(align.read_text(encoding='utf-8'))['uniform_scale']
+        aligned=json.loads(align.read_text(encoding='utf-8'))
+        # meshes of a VRM whose root object is scaled (e.g. 1.3) keep that scale in their world matrix
+        scale=aligned['uniform_scale']*aligned.get('source_world_scale',1.0)
         for slot in target.slots:
             role=slot.key
             combined_regions=set(slot.source_regions)

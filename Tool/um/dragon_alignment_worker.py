@@ -67,6 +67,12 @@ def audit(mapping):
     target_basis = basis(t['hips'], t['head'], t['leftUpperArm'], t['rightUpperArm'])
     rotation = target_basis @ source_basis.transposed()
     scale = th / sh
+    # Avatars exported from Unity often carry a scale on the root object (for example 1.3). Heights above are
+    # measured in world space, so the fit already includes it; remember it so later steps can tell what the
+    # imported meshes' world scale should be (fit scale x source scale).
+    source_scales = source.matrix_world.to_scale()
+    if max(source_scales) - min(source_scales) > 1e-4:
+        raise RuntimeError(f'The avatar root has a non-uniform scale {list(source_scales)}; apply the scale in Unity first')
     translation = t['hips'] - scale * (rotation @ s['hips'])
     residuals = {role: round(100 * ((translation + scale * (rotation @ point)) - t[role]).length, 3)
                  for role, point in s.items()}
@@ -74,7 +80,7 @@ def audit(mapping):
         'source_rig': source.name, 'target_rig': target.name,
         'height_m': {'vrm': round(sh, 5), 'target': round(th, 5)},
         'upper_arm_joint_width_m': {'vrm': round(sw, 5), 'target': round(tw, 5)},
-        'uniform_scale': round(scale, 6), 'upper_arm_width_ratio_after_scale': round(scale * sw / tw, 4),
+        'uniform_scale': round(scale, 6), 'source_world_scale': round(source_scales[0], 6), 'upper_arm_width_ratio_after_scale': round(scale * sw / tw, 4),
         'rotation_rows': [[round(v, 8) for v in row] for row in rotation],
         'translation_m': [round(v, 6) for v in translation],
         'rest_residual_cm': residuals,

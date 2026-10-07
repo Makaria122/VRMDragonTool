@@ -44,6 +44,18 @@ DUMMY_SOURCES={'texture_multi':'dummy_multi.dds','texture_normal':'dummy_nmap.dd
 
 
 
+
+def _report_preview_meshes(preview,progress) -> None:
+    """Tell the user which meshes were attached to the main skeleton and which were left out of the conversion."""
+    try:
+        report=json.loads(preview.with_suffix('.meshes.json').read_text(encoding='utf-8'))
+    except (OSError,ValueError):
+        return
+    if report.get('moved_to_main_rig'):
+        progress('Parts with their own skeleton were attached to the main skeleton: '+', '.join(report['moved_to_main_rig'][:8]))
+    if report.get('left_out'):
+        progress('Warning: these meshes of the VRM were NOT converted: '+', '.join(report['left_out'][:12]))
+
 def run(vrm: str | Path, references: dict[str,str | Path], blender: str | Path,
         addon: str | Path, action_blend: str | Path | None, baseline_report: str | Path | None,
         output: str | Path, dummy_texture_dir: str | Path | None,
@@ -137,7 +149,8 @@ def run(vrm: str | Path, references: dict[str,str | Path], blender: str | Path,
         else:
             _blender(blender,workspace,'dragon_alignment_worker.py',[output/'bone_map.json',align],progress)
         preview=output/'spatial_preview.blend'
-        _blender(blender,workspace,'dragon_alignment_preview.py',[align,preview],progress)
+        _blender(blender,workspace,'dragon_alignment_preview.py',[align,preview,vrm],progress)
+        _report_preview_meshes(preview,progress)
         progress('Converting VRM images to private DDS files...')
         textures=extract(vrm,output/'textures',target_id=target_id)
         # Dummy slots also live in a global game texture namespace. Isolate them

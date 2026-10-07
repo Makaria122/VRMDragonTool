@@ -86,7 +86,7 @@ def create_avatar_profile(vrm: str | Path, references: dict[str,str | Path],
         alignment=work/'alignment.json'
         _blender(blender,workspace,'dragon_alignment_worker.py',[mapping_file,alignment],progress)
         preview=work/'spatial_preview.blend'
-        _blender(blender,workspace,'dragon_alignment_preview.py',[alignment,preview],progress)
+        _blender(blender,workspace,'dragon_alignment_preview.py',[alignment,preview,vrm],progress)
         inventory_file=work/'inventory.json'
         _blender(blender,preview,'dragon_generic_inventory.py',[mapping_file,inventory_file],progress)
         inventory=json.loads(inventory_file.read_text(encoding='utf-8'))

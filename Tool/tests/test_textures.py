@@ -20,7 +20,7 @@ def encode(size, fmt='PNG', color=(200, 40, 40, 255)):
     return buffer.getvalue()
 
 
-def make_glb(path, blobs, mime='image/png'):
+def make_glb(path, blobs, mime='image/png', factors=None):
     data = b''
     views = []
     for blob in blobs:
@@ -29,7 +29,8 @@ def make_glb(path, blobs, mime='image/png'):
     gltf = {'asset': {'version': '2.0'}, 'buffers': [{'byteLength': len(data)}], 'bufferViews': views,
             'images': [{'mimeType': mime, 'bufferView': i} for i in range(len(blobs))],
             'textures': [{'source': i} for i in range(len(blobs))],
-            'materials': [{'name': f'm{i}', 'pbrMetallicRoughness': {'baseColorTexture': {'index': i}}}
+            'materials': [{'name': f'm{i}', 'pbrMetallicRoughness': dict(
+                {'baseColorTexture': {'index': i}}, **({'baseColorFactor': factors[i]} if factors and factors[i] else {}))}
                           for i in range(len(blobs))]}
     js = json.dumps(gltf).encode()
     js += b' ' * (-len(js) % 4)
@@ -100,6 +101,37 @@ class TextureSizeTests(unittest.TestCase):
                         + struct.pack('<I4s', len(js), b'JSON') + js + struct.pack('<I4s', 4, b'BIN\0') + data)
         result = extract(vrm, self.root / 'flat_out')
         self.assertEqual(result['images'][0]['width'], 4)
+
+    def test_a_colour_factor_tints_the_texture_like_a_glb_viewer_does(self):
+        # a grey texture with a gold factor is gold (the gold hearts of an avatar were white before)
+        vrm = self.root / 'tint.vrm'
+        make_glb(vrm, [encode((4, 4), color=(205, 205, 205, 255)), encode((4, 4), color=(205, 205, 205, 255))],
+                 factors=[[1.0, 0.359, 0.0, 1.0], None])
+        result = extract(vrm, self.root / 'tint_out')
+        names = [m['dds'] for m in result['materials']]
+        self.assertNotEqual(names[0], names[1])  # the tinted copy is a separate file
+        self.assertIn('_c00', names[0])
+        tinted = Image.open(self.root / 'tint_out' / names[0]).convert('RGBA').getpixel((0, 0))
+        plain = Image.open(self.root / 'tint_out' / names[1]).convert('RGBA').getpixel((0, 0))
+        self.assertGreater(tinted[0], 150)   # red kept
+        self.assertLess(tinted[2], 40)       # blue removed
+        self.assertLess(tinted[1], tinted[0] - 40)
+        self.assertGreater(plain[2], 150)    # the untinted material still uses the original texture
+
+    def test_a_dark_factor_darkens_and_a_white_factor_changes_nothing(self):
+        lut = textures.tint_lut(0.022)
+        self.assertLess(lut[205], 40)
+        self.assertEqual(textures.tint_lut(1.0), list(range(256)))
+
+    def test_flat_colours_are_encoded_as_srgb(self):
+        vrm = self.root / 'flat2.vrm'
+        gltf = {'asset': {'version': '2.0'}, 'materials': [{'name': 'f', 'pbrMetallicRoughness': {'baseColorFactor': [0.5, 0.5, 0.5, 1.0]}}]}
+        js = json.dumps(gltf).encode()
+        js += b' ' * (-len(js) % 4)
+        vrm.write_bytes(b'glTF' + struct.pack('<II', 2, 12 + 8 + len(js) + 8 + 4)
+                        + struct.pack('<I4s', len(js), b'JSON') + js + struct.pack('<I4s', 4, b'BIN\0') + b'\0\0\0\0')
+        result = extract(vrm, self.root / 'flat2_out')
+        self.assertTrue(result['images'][0]['flat_base_color'][0] in range(180, 195))  # linear 0.5 is sRGB 188
 
 
 if __name__ == '__main__':

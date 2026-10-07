@@ -1,5 +1,10 @@
 # Changes
 
+## Fix: stretched face and missing hair parts with VRMs exported without Avatar Optimizer
+- **Vertex positions now come from the VRM file.** Blender's glTF importer does not reproduce every VRM: for the head mesh of one avatar it posed some bones (cheeks, tongue) with a 90 degree rotation and a 1.5 m offset, which stretched the face down to the chest in the game. The preview now reads the VRM itself and places every vertex where the glTF specification puts it (weight x joint world x inverse bind x position; checked against Blender on all meshes of the test avatar: identical except the broken head mesh). This replaces the earlier "bake Blender's pose" step, which stays only as a fallback when the VRM cannot be read.
+- **Parts with their own skeleton are converted too.** A twintail on its own 62 bones, a ribbon, a hairpin and a ring (props on bones) used to be dropped silently because they were not skinned to the main skeleton. They are now attached to the main skeleton through the nearest ancestor bone (a twintail follows the head). The conversion says which parts were attached and warns, naming them, about any mesh of the VRM that was left out.
+- New module `um/dragon_vrm_skin.py` (numpy, no Blender needed to test it) with 5 tests.
+
 ## New: warning for bones whose pose cannot be stored in a VRM (hair lock sticking out)
 - Before converting, the tool now checks the skin of the VRM without Blender: for every joint the world matrix times the inverse bind matrix must be the same across a skin. A bone with a non-uniform scale that is also rotated has a sheared world matrix in Unity, which glTF cannot store; viewers and this tool then pose the bone and its children differently from Unity (found with a hair lock sticking out: bone `Front_Route.002` had a scale of 1.31 on one axis, its five bones deviated by up to 9.5 cm). The conversion shows a warning with the bones and the fix (reset their scale to 1 in the avatar tool and export again). Avatars without the problem (rurune) give no warning. 3 new tests.
 

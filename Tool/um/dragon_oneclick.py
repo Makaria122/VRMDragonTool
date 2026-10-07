@@ -93,6 +93,9 @@ def run(vrm: str | Path, references: dict[str,str | Path], blender: str | Path,
                    '- User-owned Lost Judgment references only; originals/game/installed MODs unchanged.\n'
                    '- Mods-format output and validation results are recorded locally.\n',encoding='utf-8')
     try:
+        from um.dragon_vrm_check import skin_warnings
+        for warning in skin_warnings(vrm):
+            progress('Warning: '+warning)
         progress('Inspecting the VRM and the original GMDs in detail...')
         workspace=output/'source_reference.blend'
         if target_id == 'yagami':

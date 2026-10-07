@@ -136,6 +136,7 @@ def run(job):
             dst.objects=list(requested)
         imported.update({(blend,name):obj for name,obj in zip(requested,dst.objects)})
     staged=[]
+    expected_diffuse=set()  # diffuse textures the source meshes really use; every one must survive the export
     for index,entry in enumerate(job['meshes']):
         source=imported[(Path(entry['blend']).resolve(),entry['object'])]
         if source is None or source.type!='MESH' or not source.data.uv_layers:
@@ -418,6 +419,10 @@ def run(job):
         material_dummy_maps=[]
         if any(p.material_index>=len(names) for p in obj.data.polygons):
             raise RuntimeError(f'Polygon material slot out of range: {obj.name}')
+        # Clearing the slots resets every polygon's material index to 0 in Blender; without restoring the
+        # indices a mesh with several materials was exported with only its first material (all faces ribbon,
+        # shirt and skirt lost their textures).
+        polygon_materials=[p.material_index for p in obj.data.polygons]
         obj.data.materials.clear()
         for name in material_keys:
             filename=mat_map[name]
@@ -447,12 +452,17 @@ def run(job):
                                         'source_region':source_region,'template_shader':template_shader,
                                         'specular_rgb':[0,0,0]})
             obj.data.materials.append(mat)
+        obj.data.polygons.foreach_set('material_index',polygon_materials)
+        obj.data.update()
+        if sorted(set(p.material_index for p in obj.data.polygons))!=sorted(set(polygon_materials)):
+            raise RuntimeError(f'Material assignment was not preserved: {obj.name}')
         if obj.data.shape_keys and any((obj.data.vertices[v.index].co-
                 obj.data.shape_keys.key_blocks[0].data[v.index].co).length>1e-5
                 for v in obj.data.vertices):
             raise RuntimeError(f'Stale Basis for {obj.name}')
         if any(not all(math.isfinite(c) for c in v.co) for v in obj.data.vertices):
             raise RuntimeError(f'Nonfinite vertices: {obj.name}')
+        expected_diffuse.update(Path(mat_map[material_keys[i]]).stem for i in set(polygon_materials))
         staged.append({'source':source.name,'mesh':obj.name,'vertices':len(obj.data.vertices),
                        'faces':len(obj.data.polygons),'rest_fit_alpha':round(rest_alpha,5),
                        'max_proposed_rest_move_m':round(max_rest_move,6),'solver_max_displacement_m':round(solver_move,6),
@@ -503,6 +513,9 @@ def run(job):
     attributes=[mesh.attribute_set for node in exported.overall_hierarchy
                 for mesh in getattr(node,'mesh_list',[])]
     dummy_verified=verify_dummy_references(attributes,job['dummy_texture_slots'])
+    lost=sorted(expected_diffuse-{getattr(a,'texture_diffuse',None) for a in attributes})
+    if lost:
+        raise RuntimeError(f'Materials used by the avatar were lost in the exported GMD: {lost}')
     if any(list(a.material.origin_data.specular)!=[0,0,0]
            or any(tag in a.shader.name.lower() for tag in ('[eye]','[mouth]'))
            or a.shader.name.lower().startswith('sd_d')

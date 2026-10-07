@@ -12,6 +12,51 @@ import bpy
 from mathutils import Matrix, Vector
 
 
+def bake_pose_into_meshes(rig, objects):
+    """Bake the armature's current pose into the vertices and return to the rest pose.
+
+    Avatars exported from Unity can carry bones whose pose differs from the bind pose the skin was written with
+    (hair added with its own armature, props placed on bones, hand-adjusted bones). Viewers and Unity show the
+    posed shape, so the posed shape is the intended one; reading the raw vertices instead put such meshes in
+    the wrong place (a twintail two metres away, a hairpin at the feet). Meshes whose pose equals the bind pose
+    do not change.
+    """
+    depsgraph = bpy.context.evaluated_depsgraph_get()
+    moved = {}
+    for obj in objects:
+        evaluated = obj.evaluated_get(depsgraph)
+        mesh = evaluated.to_mesh()
+        try:
+            if len(mesh.vertices) != len(obj.data.vertices):
+                continue  # other modifiers change the vertex count; leave the mesh as it is
+            count = len(obj.data.vertices)
+            posed = [0.0] * (count * 3)
+            mesh.vertices.foreach_get('co', posed)
+            raw = [0.0] * (count * 3)
+            obj.data.vertices.foreach_get('co', raw)
+        finally:
+            evaluated.to_mesh_clear()
+        delta = [p - r for p, r in zip(posed, raw)]
+        biggest = max((abs(d) for d in delta), default=0.0)
+        if biggest < 1e-6:
+            continue
+        obj.data.vertices.foreach_set('co', posed)
+        if obj.data.shape_keys:  # keep the shape keys relative to the new base shape
+            for block in obj.data.shape_keys.key_blocks:
+                coords = [0.0] * (count * 3)
+                block.data.foreach_get('co', coords)
+                block.data.foreach_set('co', [c + d for c, d in zip(coords, delta)])
+        obj.data.update()
+        moved[obj.name] = round(biggest, 4)
+    for bone in rig.pose.bones:
+        bone.location = (0.0, 0.0, 0.0)
+        bone.rotation_quaternion = (1.0, 0.0, 0.0, 0.0)
+        bone.rotation_euler = (0.0, 0.0, 0.0)
+        bone.scale = (1.0, 1.0, 1.0)
+    bpy.context.view_layer.update()
+    return moved
+
+
 def run(audit, dest):
     if dest.exists() or dest.suffix.lower() != '.blend' or not dest.parent.is_dir():
         raise RuntimeError('Choose a NEW .blend in an existing private folder')
@@ -57,9 +102,11 @@ def run(audit, dest):
         if obj.find_armature() != copied:
             raise RuntimeError(f'Preview armature mismatch: {source.name}')
     bpy.context.view_layer.update()
+    baked = bake_pose_into_meshes(copied, [o for o in collection.objects if o.type == 'MESH'])
     copied['DRAGON_PREVIEW_UNVERIFIED'] = 'spatial only; no retarget, GMD export or pose tests'
     bpy.context.scene['DRAGON_PREVIEW_UNVERIFIED'] = 'do not export or install'
     bpy.ops.wm.save_as_mainfile(filepath=str(dest), check_existing=False)
+    print('DRAGON_POSE_BAKED', baked)
     print('DRAGON_SPATIAL_PREVIEW_OK', len(meshes), dest)
 
 

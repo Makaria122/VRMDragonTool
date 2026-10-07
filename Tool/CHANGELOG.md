@@ -1,5 +1,8 @@
 # Changes
 
+## Fix: avatars whose root object is scaled (for example 1.3)
+- Conversion stopped with "Unexpected source world scale for PREVIEW_ONLY_...". VRChat avatars often keep a scale on the root object (Unity avatar scale). The fit itself was already correct, because heights are measured in world space; only the sanity check assumed the imported meshes had scale 1. The alignment now records `source_world_scale` and the check expects fit scale x source scale. An avatar root with a non-uniform scale is refused with a clear message (apply the scale in Unity first). Checked with a 1.3-scaled Booth/VRChat avatar converted to Kuwana (tops and face GMDs, Mods folder created).
+
 ## Fix: bodies looked black in dark scenes
 - Clothing materials now copy the plain opaque shader (`sd_o1dzt`) of the target character when it has one. Before, the first opaque non-skin material was copied, which for Kiryu is the suit shader (`sd_o1dzt_m2dzt_h2dz`) with its own roughness/reflection maps (rm/refl) kept; with a dark VRM texture this turned black in dim cutscenes. Confirmed in game with Kiryu replaced by an avatar with a black coat; raising the specular color (0.039) or brightening dark textures changed little. Characters without a plain shader fall back to the old choice. Hair and face templates are unchanged. 4 new tests.
 
